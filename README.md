@@ -6,7 +6,7 @@
 
 ## 数据怎么来的
 
-不需要 Sensor Tower / Appfigures 账号。每天定时拉 Apple 公开接口：
+不需要 Sensor Tower / Appfigures 账号。用 Apple 公开接口：
 
 - 畅销榜 / 免费榜 RSS：`itunes.apple.com/{区}/rss/topgrossingapplications/limit=100/genre={品类}/json`
 - 评分和评价数：iTunes Lookup `itunes.apple.com/lookup?id=...&country=...`
@@ -47,4 +47,19 @@ curl -X POST http://127.0.0.1:8787/api/ingest
 pnpm deploy
 ```
 
-域名绑在 `appgap.01mvp.com`。Cron 每天 08:20 UTC（17:20 北京时间）再拉一次。
+域名：https://appgap.01mvp.com
+
+Apple 会拦 Cloudflare 机房 IP（RSS 返回 403），所以线上 Worker 自己拉榜经常失败。第一次数据是从这台电脑拉完再导入 D1 的。之后要更新榜：
+
+```bash
+# 在能访问 Apple 的网络下
+pnpm exec wrangler dev --port 8787
+curl -X POST http://127.0.0.1:8787/api/ingest
+pnpm exec wrangler d1 export appgap --local --no-schema \
+  --table apps --table chart_ranks --table app_metrics \
+  --table opportunities --table app_reviews \
+  --output /tmp/appgap-data.sql -y
+pnpm exec wrangler d1 execute appgap --remote --file /tmp/appgap-data.sql
+```
+
+如果以后有住宅代理或 GitHub Actions 跑得通，可以把这条流水线接到定时任务上。没有新数据时，网站会继续展示上一份快照。

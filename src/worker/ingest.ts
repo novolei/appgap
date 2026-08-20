@@ -1,7 +1,7 @@
 import { buildOneLiner } from "../shared/oneLiner";
 import { buildHistoryIndex, classifyOpportunities, type AppSnapshot, type MetricSnapshot, type RankRecord } from "../shared/classify";
 import type { LensId } from "../shared/catalog";
-import { fetchChart, INGEST_JOBS, lookupApps, mapPool, tokyoDate, type ChartEntry, type LookupApp } from "./apple";
+import { fetchChart, fetchReviews, INGEST_JOBS, lookupApps, mapPool, tokyoDate, type ChartEntry, type LookupApp } from "./apple";
 
 export type IngestStats = {
   date: string;
@@ -53,8 +53,18 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
   const runId = inserted.meta.last_row_id;
 
   try {
-    const chartResults = await mapPool(INGEST_JOBS, 6, (job) => fetchChart(job));
+    const chartResults = await mapPool(INGEST_JOBS, 6, async (job) => {
+      try {
+        return await fetchChart(job);
+      } catch (error) {
+        console.error("chart failed", job.country, job.chart, job.genreId, error);
+        return [];
+      }
+    });
     const entries = chartResults.flat();
+    if (entries.length === 0) {
+      throw new Error("Apple 榜单全部失败（Cloudflare IP 常被 403）。请在本地 wrangler dev 拉一次再写入远端 D1。");
+    }
     const idsByCountry = new Map<string, Set<string>>();
     for (const entry of entries) {
       const set = idsByCountry.get(entry.country) ?? new Set();
@@ -263,6 +273,39 @@ export async function rebuildOpportunities(env: Env, date: string): Promise<numb
     env.DB,
     apps.map((app) => oneLinerUpdate.bind(app.oneLiner, app.id)),
   );
+
+  const reviewTargets = opportunities
+    .filter((row) => row.lens === "money_hated")
+    .slice(0, 25);
+  const reviewInsert = env.DB.prepare(
+    "INSERT INTO app_reviews (app_id, country, rating, title, content, author, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  );
+  const fetchedAt = new Date().toISOString();
+  for (const row of reviewTargets) {
+    try {
+      const reviews = await fetchReviews(row.appId, row.country);
+      if (reviews.length === 0) continue;
+      await env.DB.prepare("DELETE FROM app_reviews WHERE app_id = ? AND country = ?")
+        .bind(row.appId, row.country)
+        .run();
+      await batchRun(
+        env.DB,
+        reviews.map((review) =>
+          reviewInsert.bind(
+            row.appId,
+            row.country,
+            review.rating,
+            review.title,
+            review.content,
+            review.author,
+            fetchedAt,
+          ),
+        ),
+      );
+    } catch (error) {
+      console.error("reviews failed", row.appId, row.country, error);
+    }
+  }
   return opportunities.length;
 }
 

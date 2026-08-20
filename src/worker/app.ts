@@ -229,11 +229,26 @@ app.get("/api/apps/:id", async (context) => {
     .all<{ date: string; country: string; chart: string; genreId: string; rank: number }>();
 
   const country = opp?.country || positions.results?.[0]?.country || "us";
-  let reviews: AppDetail["reviews"] = [];
-  try {
-    reviews = (await fetchReviews(id, country)).slice().sort((a, b) => (a.rating ?? 5) - (b.rating ?? 5));
-  } catch {
-    reviews = [];
+  const stored = await context.env.DB.prepare(
+    `SELECT rating, title, content, author FROM app_reviews
+     WHERE app_id = ? AND country = ?
+     ORDER BY rating ASC LIMIT 20`,
+  )
+    .bind(id, country)
+    .all<{ rating: number | null; title: string; content: string; author: string }>();
+  let reviews: AppDetail["reviews"] = (stored.results ?? []).map((row) => ({
+    rating: row.rating,
+    title: row.title,
+    content: row.content,
+    author: row.author,
+    updated: null,
+  }));
+  if (reviews.length === 0) {
+    try {
+      reviews = (await fetchReviews(id, country)).slice().sort((a, b) => (a.rating ?? 5) - (b.rating ?? 5));
+    } catch {
+      reviews = [];
+    }
   }
 
   const analysis = analyzeApp({
