@@ -11,6 +11,7 @@ LOG="${APPGAP_INGEST_LOG:-$HOME/Library/Logs/appgap-ingest.log}"
 mkdir -p "$(dirname "$LOG")"
 
 export PATH="$HOME/.nvm/versions/node/v24.15.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy no_proxy NO_PROXY
 
 if [ -f "$ROOT/.env.prd" ]; then
   set -a
