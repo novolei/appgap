@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "appgap",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-20",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "appgap",
+      "database_id": "682d7972-9623-44b4-b2a9-fb2dcfd3ad41",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["20 8 * * *"]
+  },
+  "routes": [
+    {
+      "pattern": "appgap.01mvp.com",
+      "custom_domain": true
+    }
+  ],
+  "limits": {
+    "cpu_ms": 300000
+  },
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true
+}
