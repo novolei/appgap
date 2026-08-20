@@ -49,17 +49,14 @@ pnpm deploy
 
 域名：https://appgap.01mvp.com
 
-Apple 会拦 Cloudflare 机房 IP（RSS 返回 403），所以线上 Worker 自己拉榜经常失败。第一次数据是从这台电脑拉完再导入 D1 的。之后要更新榜：
+Apple 会拦 Cloudflare 机房 IP（RSS 返回 403），所以线上 Worker 自己拉榜经常失败。日常更新走两条路（数据仍写进 Cloudflare D1，网站才能读）：
 
 ```bash
-# 在能访问 Apple 的网络下
-pnpm exec wrangler dev --port 8787
-curl -X POST http://127.0.0.1:8787/api/ingest
-pnpm exec wrangler d1 export appgap --local --no-schema \
-  --table apps --table chart_ranks --table app_metrics \
-  --table opportunities --table app_reviews \
-  --output /tmp/appgap-data.sql -y
-pnpm exec wrangler d1 execute appgap --remote --file /tmp/appgap-data.sql
+pnpm ingest:prod          # 用你这台电脑的 IP 拉榜，写入线上 D1
 ```
 
-如果以后有住宅代理或 GitHub Actions 跑得通，可以把这条流水线接到定时任务上。没有新数据时，网站会继续展示上一份快照。
+这台 Mac 已经挂了 launchd：每天 08:30 自动跑。日志在 `~/Library/Logs/appgap-ingest.log`。
+
+GitHub Actions 每天 08:30（北京时间）也会试一次；如果 GitHub 的 IP 也被 Apple 拦，就靠本机那条。
+
+没有新数据时，网站继续展示上一份快照。

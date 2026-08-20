@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "deploy": "pnpm build && wrangler d1 migrations apply appgap --remote && wrangler deploy",
+    "ingest:prod": "bash scripts/ingest-to-prod.sh",
     "cf-typegen": "wrangler types"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd"]
   },
   "dependencies": {
     "hono": "^4.12.15",

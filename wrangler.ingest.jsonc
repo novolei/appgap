@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "appgap-ingest",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-20",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "appgap",
+      "database_id": "682d7972-9623-44b4-b2a9-fb2dcfd3ad41",
+      "migrations_dir": "migrations",
+      "remote": true
+    }
+  ]
+}
