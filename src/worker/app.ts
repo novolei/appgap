@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { analyzeApp } from "../shared/analysis";
-import { LENSES, lensById, type LensId } from "../shared/catalog";
-import type { AppDetail, OpportunityListResponse, OpportunityRow, RankPosition } from "../shared/types";
+import { LENSES, lensById, type LensId, type PoolId } from "../shared/catalog";
+import type { AppDetail, OpportunityListResponse, OpportunityRow, RankPosition, ReviewItem } from "../shared/types";
+import { chineseName, chineseOneLiner, chineseReview, hasForeignScript, localizeRegions } from "../shared/translate";
 import { fetchReviews } from "./apple";
 import { isIngestLocked, latestIngest, lensCounts, rebuildOpportunities, runIngest } from "./ingest";
 
@@ -41,9 +42,16 @@ function mapRow(row: OppRecord): OpportunityRow {
     lens: row.lens,
     appId: row.app_id,
     name: row.name,
+    nameZh: chineseName(row.name, row.genre_id),
     artistName: row.artist_name,
     iconUrl: row.icon_url,
-    oneLiner: row.one_liner || "",
+    oneLiner: chineseOneLiner({
+      name: row.name,
+      oneLiner: localizeRegions(row.one_liner || ""),
+      genreId: row.genre_id,
+      country: row.country,
+      rank: row.rank,
+    }),
     country: row.country,
     chart: row.chart,
     genreId: row.genre_id,
@@ -65,17 +73,21 @@ app.get("/api/health", (context) => context.json({ ok: true }));
 
 app.get("/api/meta", async (context) => {
   const latest = await latestIngest(context.env);
+  const lastOk = await context.env.DB.prepare(
+    "SELECT finished_at, stats FROM ingest_runs WHERE status = 'success' ORDER BY id DESC LIMIT 1",
+  ).first<{ finished_at: string | null; stats: string | null }>();
   const counts = await lensCounts(context.env);
   let snapshotDate: string | null = null;
-  if (latest?.stats) {
+  const stats = lastOk?.stats || (latest?.status === "success" ? latest.stats : null);
+  if (stats) {
     try {
-      snapshotDate = (JSON.parse(latest.stats) as { date?: string }).date ?? null;
+      snapshotDate = (JSON.parse(stats) as { date?: string }).date ?? null;
     } catch {
       snapshotDate = null;
     }
   }
   return context.json({
-    lastSuccessAt: latest?.status === "success" ? latest.finished_at : null,
+    lastSuccessAt: lastOk?.finished_at ?? (latest?.status === "success" ? latest.finished_at : null),
     lastStatus: latest?.status ?? null,
     snapshotDate,
     ingesting: latest?.status === "running",
@@ -162,9 +174,14 @@ app.get("/api/apps", async (context) => {
         lens: "money_hated",
         appId: row.app_id,
         name: row.name,
+        nameZh: chineseName(row.name, row.genre_id),
         artistName: row.artist_name,
         iconUrl: row.icon_url,
-        oneLiner: row.one_liner || "",
+        oneLiner: chineseOneLiner({
+          name: row.name,
+          oneLiner: row.one_liner,
+          genreId: row.genre_id,
+        }),
         country: "jp",
         chart: "grossing",
         genreId: row.genre_id || "6002",
@@ -236,16 +253,26 @@ app.get("/api/apps/:id", async (context) => {
   )
     .bind(id, country)
     .all<{ rating: number | null; title: string; content: string; author: string }>();
-  let reviews: AppDetail["reviews"] = (stored.results ?? []).map((row) => ({
-    rating: row.rating,
-    title: row.title,
-    content: row.content,
-    author: row.author,
-    updated: null,
-  }));
+  function toZhReview(row: { rating: number | null; title: string; content: string; author: string }): ReviewItem {
+    const titleZh = chineseReview(row.title);
+    const contentZh = chineseReview(row.content);
+    return {
+      rating: row.rating,
+      title: titleZh || row.title,
+      content: contentZh || row.content,
+      titleOriginal: hasForeignScript(row.title) ? row.title : null,
+      contentOriginal: hasForeignScript(row.content) ? row.content : null,
+      author: row.author,
+      updated: null,
+    };
+  }
+  let reviews: AppDetail["reviews"] = (stored.results ?? []).map(toZhReview);
   if (reviews.length === 0) {
     try {
-      reviews = (await fetchReviews(id, country)).slice().sort((a, b) => (a.rating ?? 5) - (b.rating ?? 5));
+      reviews = (await fetchReviews(id, country))
+        .slice()
+        .sort((a, b) => (a.rating ?? 5) - (b.rating ?? 5))
+        .map((row) => toZhReview(row));
     } catch {
       reviews = [];
     }
@@ -265,11 +292,18 @@ app.get("/api/apps/:id", async (context) => {
     app: {
       id: appRow.id,
       name: appRow.name,
+      nameZh: chineseName(appRow.name, opp?.genre_id),
       artistName: appRow.artist_name,
       artistId: appRow.artist_id,
       iconUrl: appRow.icon_url,
       description: appRow.description,
-      oneLiner: appRow.one_liner || "",
+      oneLiner: chineseOneLiner({
+        name: appRow.name,
+        oneLiner: appRow.one_liner,
+        genreId: opp?.genre_id,
+        country,
+        rank: opp?.rank,
+      }),
       genreName: appRow.genre_name,
       formattedPrice: appRow.formatted_price,
       trackViewUrl: appRow.track_view_url,
@@ -280,6 +314,39 @@ app.get("/api/apps/:id", async (context) => {
     analysis,
   };
   return context.json(detail);
+});
+
+app.get("/api/pools", async (context) => {
+  const rows = await context.env.DB.prepare("SELECT app_id AS appId, pool FROM pools").all<{
+    appId: string;
+    pool: PoolId;
+  }>();
+  const watch: string[] = [];
+  const build: string[] = [];
+  for (const row of rows.results ?? []) {
+    if (row.pool === "build") build.push(row.appId);
+    else watch.push(row.appId);
+  }
+  return context.json({ watch, build });
+});
+
+app.post("/api/pools", async (context) => {
+  const body = await context.req.json<{ appId?: string; pool?: PoolId | null }>().catch(() => null);
+  const appId = body?.appId?.trim();
+  if (!appId) return context.json({ error: "missing appId" }, 400);
+  if (!body?.pool) {
+    await context.env.DB.prepare("DELETE FROM pools WHERE app_id = ?").bind(appId).run();
+    return context.json({ ok: true });
+  }
+  if (body.pool !== "watch" && body.pool !== "build") {
+    return context.json({ error: "bad pool" }, 400);
+  }
+  await context.env.DB.prepare("INSERT OR REPLACE INTO pools (app_id, pool, created_at) VALUES (?, ?, ?)").bind(
+    appId,
+    body.pool,
+    new Date().toISOString(),
+  ).run();
+  return context.json({ ok: true });
 });
 
 app.post("/api/ingest", async (context) => {

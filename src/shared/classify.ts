@@ -1,4 +1,5 @@
 import { COUNTRIES, countryLabel, type ChartId, type LensId } from "./catalog";
+import { chineseName } from "./translate";
 import { isOfficialOrBigApp } from "./publishers";
 import type { OpportunityRow, RankPosition } from "./types";
 
@@ -107,6 +108,7 @@ function rowFrom(input: {
     lens: input.lens,
     appId: input.app.id,
     name: input.app.name,
+    nameZh: chineseName(input.app.name, input.primary.genreId),
     artistName: input.app.artistName,
     iconUrl: input.app.iconUrl,
     oneLiner: input.oneLiner,

@@ -11,6 +11,7 @@ export type OpportunityRow = {
   lens: LensId;
   appId: string;
   name: string;
+  nameZh: string;
   artistName: string;
   iconUrl: string | null;
   oneLiner: string;
@@ -32,6 +33,8 @@ export type ReviewItem = {
   rating: number | null;
   title: string;
   content: string;
+  titleOriginal: string | null;
+  contentOriginal: string | null;
   author: string;
   updated: string | null;
 };
@@ -40,6 +43,7 @@ export type AppDetail = {
   app: {
     id: string;
     name: string;
+    nameZh: string;
     artistName: string;
     artistId: string | null;
     iconUrl: string | null;

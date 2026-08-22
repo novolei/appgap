@@ -42,13 +42,6 @@ function detectSubscription(description: string): boolean {
   );
 }
 
-function firstSentence(text: string): string {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (!cleaned) return "";
-  const cut = cleaned.split(/(?<=[。！？.!?])\s/)[0] ?? cleaned;
-  return cut.length > 36 ? `${cut.slice(0, 34)}…` : cut;
-}
-
 export function buildOneLiner(input: {
   name: string;
   description?: string | null;
@@ -66,9 +59,7 @@ export function buildOneLiner(input: {
       bits[0] = `${kind}，靠订阅收费`;
     }
   } else {
-    const sentence = firstSentence(description);
-    if (sentence) bits.push(sentence);
-    else bits.push(`${genreLabel(input.genreId ?? "")}类工具`);
+    bits.push(`${genreLabel(input.genreId ?? "")}类工具`);
   }
 
   if (input.rank === 1 && input.country) {

@@ -19,7 +19,7 @@ export function formatCount(value: number | null): string {
 
 export function positionText(country: string, rank: number): string {
   if (!rank) return "已离开榜单";
-  return `${countryLabel(country)}第${rank}名`;
+  return `${countryLabel(country)} · 第 ${rank} 名`;
 }
 
 export function relativeTime(iso: string | null): string {

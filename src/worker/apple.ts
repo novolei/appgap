@@ -166,6 +166,8 @@ export async function fetchReviews(appId: string, country: string): Promise<Revi
       rating: Number(rating) || null,
       title: labelOf(entry.title),
       content: labelOf(entry.content),
+      titleOriginal: null,
+      contentOriginal: null,
       author: labelOf((entry.author as { name?: unknown } | undefined)?.name) || labelOf(entry.author),
       updated: labelOf(entry.updated) || null,
     });

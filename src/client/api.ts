@@ -25,3 +25,17 @@ export function fetchAppsByIds(ids: string[]) {
 export function fetchAppDetail(id: string) {
   return getJson<AppDetail>(`/api/apps/${id}`);
 }
+
+export function fetchPools() {
+  return getJson<{ watch: string[]; build: string[] }>("/api/pools");
+}
+
+export function savePool(appId: string, pool: "watch" | "build" | null) {
+  return fetch("/api/pools", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ appId, pool }),
+  }).then((response) => {
+    if (!response.ok) throw new Error("保存失败");
+  });
+}
