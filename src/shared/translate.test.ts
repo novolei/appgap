@@ -8,8 +8,8 @@ describe("chineseName", () => {
   it("translates English cleaner names", () => {
     expect(chineseName("Cleaner ・Phone Storage Cleanup")).toMatch(/清理|存储/);
   });
-  it("keeps untranslatable brands", () => {
-    expect(chineseName("EGLOO", "6002")).toBe("EGLOO");
+  it("names remote camera apps from description", () => {
+    expect(chineseName("EGLOO", "6002", "Use the Egloo app to check in on your camera.")).toBe("远程监控");
   });
   it("uses kind for mixed English product names", () => {
     expect(chineseName("TimeBlocks - Mobile Planner")).toBe("日历日程");
@@ -26,7 +26,7 @@ describe("chineseOneLiner", () => {
       rank: 5,
     });
     expect(line).not.toMatch(/Use the Egloo/);
-    expect(line).toMatch(/工具|应用|韩国/);
+    expect(line).toMatch(/远程|监控|摄像头|小工具/);
   });
 });
 

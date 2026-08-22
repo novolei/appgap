@@ -30,7 +30,7 @@ export function relativeTime(iso: string | null): string {
   if (minutes < 2) return "刚刚更新";
   if (minutes < 60) return `${minutes} 分钟前更新`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时前更新`;
+  if (hours < 24) return `${hours} 小时前扫描`;
   const days = Math.round(hours / 24);
-  return `${days} 天前更新`;
+  return `${days} 天前扫描`;
 }

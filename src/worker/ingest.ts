@@ -193,7 +193,7 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
   }
 }
 
-export async function rebuildOpportunities(env: Env, date: string): Promise<number> {
+export async function rebuildOpportunities(env: Env, date: string, options: { reviews?: boolean } = {}): Promise<number> {
   const appRows = await env.DB.prepare(
     `SELECT id, name, artist_name AS artistName, icon_url AS iconUrl, description,
             track_view_url AS trackViewUrl, one_liner AS oneLiner, genre_id AS genreId
@@ -274,9 +274,10 @@ export async function rebuildOpportunities(env: Env, date: string): Promise<numb
     apps.map((app) => oneLinerUpdate.bind(app.oneLiner, app.id)),
   );
 
+  if (options.reviews === false) return opportunities.length;
   const reviewTargets = opportunities
-    .filter((row) => row.lens === "money_hated")
-    .slice(0, 25);
+    .filter((row) => row.lens === "money_hated" || row.lens === "paid_tools")
+    .slice(0, 30);
   const reviewInsert = env.DB.prepare(
     "INSERT INTO app_reviews (app_id, country, rating, title, content, author, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
@@ -333,10 +334,12 @@ export async function lensCounts(env: Env): Promise<Record<LensId, number>> {
     "SELECT lens, COUNT(*) AS count FROM opportunities GROUP BY lens",
   ).all<{ lens: LensId; count: number }>();
   const counts: Record<LensId, number> = {
+    paid_tools: 0,
     money_hated: 0,
+    fresh: 0,
+    cluster: 0,
     indie_viral: 0,
     geo_gap: 0,
-    local_king: 0,
   };
   for (const row of rows.results ?? []) {
     counts[row.lens] = row.count;

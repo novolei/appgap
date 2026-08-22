@@ -1,4 +1,5 @@
-import { countryName, genreLabel } from "./catalog";
+import { countryName } from "./catalog";
+import { describeApp } from "./what";
 
 const NAME_GLOSSARY: Array<[RegExp, string]> = [
   [/qr\s*code/gi, "二维码"],
@@ -136,35 +137,28 @@ function hanCount(text: string): number {
   return (text.match(/[\u4e00-\u9fff]/g) || []).length;
 }
 
-export function chineseName(name: string, genreId?: string | null): string {
+export function chineseName(name: string, genreId?: string | null, description?: string | null): string {
+  const described = describeApp(name, description);
+  if (described.kindId) return described.nameZh;
   const cleaned = applyPairs(name, NAME_GLOSSARY).replace(/[()（）[\]{}]/g, " ").replace(/\s{2,}/g, " ").trim();
-  const kind = KIND_NAME.find((item) => item.re.test(name) || item.re.test(cleaned));
   if (cleaned && !hasForeignScript(cleaned) && hanCount(cleaned) >= 2 && hanCount(cleaned) >= latinCount(cleaned)) {
     return cleaned.replace(/\s+/g, " ");
   }
-  if (kind) return kind.zh;
   if (looksChinese(name) && !hasForeignScript(name)) return name;
-  if (latinCount(name) >= 2 && !hasForeignScript(name) && hanCount(name) === 0) return name.trim();
-  return `${genreLabel(genreId ?? "")}类应用`;
+  if (described.what !== "实用小工具") return described.nameZh;
+  return described.nameZh === name ? name : described.what;
 }
 
 export function chineseOneLiner(input: {
   name: string;
   oneLiner?: string | null;
+  description?: string | null;
   genreId?: string | null;
   country?: string | null;
   rank?: number | null;
 }): string {
-  const existing = (input.oneLiner || "").replace(/日区/g, "日本").replace(/韩区/g, "韩国").replace(/美区/g, "美国").replace(/英区/g, "英国").replace(/台区/g, "台湾").replace(/德区/g, "德国").replace(/法区/g, "法国").replace(/澳区/g, "澳洲");
-  const kind = KIND_NAME.find((item) => item.re.test(input.name) || item.re.test(existing));
-  const bits: string[] = [];
-  if (existing && looksChinese(existing) && !hasForeignScript(existing)) {
-    bits.push(existing.split("，")[0] || existing);
-  } else if (kind) {
-    bits.push(kind.zh);
-  } else {
-    bits.push(`${genreLabel(input.genreId ?? "")}类应用`);
-  }
+  const described = describeApp(input.name, input.description ?? input.oneLiner);
+  const bits = [described.what];
   if (input.rank === 1 && input.country) bits.push(`${countryName(input.country)}畅销第一`);
   else if (input.rank === 2 && input.country) bits.push(`${countryName(input.country)}畅销第二`);
   return [...new Set(bits.filter(Boolean))].join(" · ");

@@ -10,7 +10,7 @@ describe("buildOneLiner", () => {
         country: "jp",
         rank: 1,
       }),
-    ).toContain("扫二维码");
+    ).toContain("二维码");
   });
 
   it("tags cleaners", () => {

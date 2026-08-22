@@ -7,9 +7,11 @@ import { readPools } from "./storage";
 
 function parseHash(): { lens: LensId | PoolId; appId: string | null; q: string } {
   const params = new URLSearchParams(window.location.hash.replace(/^#\/?/, "").replace(/^\/?/, ""));
-  const raw = params.get("lens") || "money_hated";
+  const raw = params.get("lens") === "local_king" ? "geo_gap" : params.get("lens") || "paid_tools";
   const lens = (
-    ["money_hated", "indie_viral", "geo_gap", "local_king", "watch", "build"].includes(raw) ? raw : "money_hated"
+    ["paid_tools", "money_hated", "fresh", "cluster", "indie_viral", "geo_gap", "watch", "build"].includes(raw)
+      ? raw
+      : "paid_tools"
   ) as LensId | PoolId;
   return { lens, appId: params.get("app"), q: params.get("q") || "" };
 }
@@ -167,7 +169,7 @@ export function App() {
       <header className="hero">
         <div>
           <h1>AppGap</h1>
-          <p>从各国 App Store 畅销榜里，找出「有人在付钱、体验却很差」的产品空位。</p>
+          <p>每周扫一次各国畅销榜，用来发现能做的小工具需求。不用天天打开。</p>
         </div>
         <div className="hero-meta">{ingesting ? "正在同步榜单" : relativeTime(updatedAt)}</div>
       </header>
@@ -222,9 +224,9 @@ export function App() {
                 <br />
                 {formatCount(item.ratingCount)} 条评价
                 {item.rankChange != null && item.rankChange !== 0
-                  ? ` · ${item.rankChange > 0 ? "升" : "降"} ${Math.abs(item.rankChange)}`
+                  ? ` · 较上次${item.rankChange > 0 ? "升" : "降"} ${Math.abs(item.rankChange)}`
                   : ""}
-                {` · ${item.consecutiveDays} 天`}
+                {item.consecutiveDays <= 1 ? " · 这次新见到" : ` · 已连续 ${item.consecutiveDays} 周`}
               </small>
             </div>
           </button>
@@ -232,7 +234,7 @@ export function App() {
       </div>
 
       <p className="foot">
-        数据来自 Apple 公开畅销榜和免费榜，不是官方收入。区域显示为中文国名；App 保留商店原名，并配中文译名。
+        每周一扫描一次，不是每天。区域为中文国名；标题是干什么的，下面一行是商店原名。
         <br />
         <a href="https://01mvp.com" target="_blank" rel="noreferrer">
           01MVP

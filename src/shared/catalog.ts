@@ -23,38 +23,43 @@ export const CHARTS = [
 export type CountryId = (typeof COUNTRIES)[number]["id"];
 export type GenreId = (typeof GENRES)[number]["id"];
 export type ChartId = (typeof CHARTS)[number]["id"];
-export type LensId = "money_hated" | "indie_viral" | "geo_gap" | "local_king";
+export type LensId = "paid_tools" | "money_hated" | "fresh" | "cluster" | "indie_viral" | "geo_gap";
 export type PoolId = "watch" | "build";
 
 export const LENSES: Array<{
   id: LensId;
   label: string;
   hint: string;
-  icon: "coin" | "rocket" | "globe" | "crown";
 }> = [
   {
+    id: "paid_tools",
+    label: "赚钱的小工具",
+    hint: "工具 / 效率 / 照片类已经排进畅销榜。不看口碑，只看有没有人付钱——这是需求还在的信号。",
+  },
+  {
     id: "money_hated",
-    label: "差评却在赚钱",
-    hint: "已经排进畅销榜，说明有人付钱；分数却掉在 4 以下。同类需求被验证了，缺的是一个不惹人厌的版本。",
-    icon: "coin",
+    label: "差评可替换",
+    hint: "同样在畅销榜上，但评分掉在 4 以下。需求被验证了，缺一个不惹人厌的版本。",
+  },
+  {
+    id: "fresh",
+    label: "新上榜",
+    hint: "这次扫描才第一次见到。可能是新需求刚起来，值得每周扫一眼。",
+  },
+  {
+    id: "cluster",
+    label: "同类扎堆",
+    hint: "同一类小工具同时挤进畅销榜，比如一堆扫码、清理、投屏。品类被验证了，未必非要抄第一名。",
   },
   {
     id: "indie_viral",
-    label: "小工作室上榜",
-    hint: "不是大厂、也不是政府机关，却挤进免费榜或畅销榜。一个人或小团队就能把这个品类做起来。",
-    icon: "rocket",
+    label: "小工作室",
+    hint: "不是大厂也不是政府机关，却挤进免费榜或畅销榜。一个人也能做起来的规模。",
   },
   {
     id: "geo_gap",
-    label: "别的国家没有",
-    hint: "在某一两个国家很靠前，换个市场几乎搜不到。可以把那边的玩法搬过来，或做本地化更深的替代。",
-    icon: "globe",
-  },
-  {
-    id: "local_king",
-    label: "只在一地称王",
-    hint: "只在一个国家的榜上很靠前。需求可能是本地的，或本地化做到了别人做不到的深度。",
-    icon: "crown",
+    label: "别国没有",
+    hint: "在某一两个国家很靠前，换个市场几乎没有。可以把玩法搬过去，或做本地化更深的替代。",
   },
 ];
 

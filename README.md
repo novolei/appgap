@@ -49,6 +49,8 @@ pnpm deploy
 
 域名：https://appgap.01mvp.com
 
+默认 **每周一 08:30（北京时间）** 扫一次榜。需求发现不需要每天看：留每周快照就能看出「新上榜 / 还在榜 / 掉下去」。
+
 Apple 会拦 Cloudflare 机房 IP（RSS 返回 403），所以线上 Worker 自己拉榜经常失败。日常更新走两条路（数据仍写进 Cloudflare D1，网站才能读）：
 
 ```bash

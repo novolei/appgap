@@ -1,8 +1,8 @@
-name: Daily ingest
+name: Weekly ingest
 
 on:
   schedule:
-    - cron: "30 0 * * *"
+    - cron: "30 0 * * 1"
   workflow_dispatch:
 
 jobs:

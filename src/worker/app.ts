@@ -24,6 +24,7 @@ type OppRecord = {
   artist_name: string;
   icon_url: string | null;
   track_view_url: string | null;
+  description?: string | null;
 };
 
 function mapRow(row: OppRecord): OpportunityRow {
@@ -42,12 +43,13 @@ function mapRow(row: OppRecord): OpportunityRow {
     lens: row.lens,
     appId: row.app_id,
     name: row.name,
-    nameZh: chineseName(row.name, row.genre_id),
+    nameZh: chineseName(row.name, row.genre_id, row.description),
     artistName: row.artist_name,
     iconUrl: row.icon_url,
     oneLiner: chineseOneLiner({
       name: row.name,
       oneLiner: localizeRegions(row.one_liner || ""),
+      description: row.description,
       genreId: row.genre_id,
       country: row.country,
       rank: row.rank,
@@ -96,7 +98,7 @@ app.get("/api/meta", async (context) => {
 });
 
 app.get("/api/opportunities", async (context) => {
-  const lens = (context.req.query("lens") || "money_hated") as LensId;
+  const lens = (context.req.query("lens") || "paid_tools") as LensId;
   if (!LENSES.some((item) => item.id === lens)) {
     return context.json({ error: "unknown lens" }, 400);
   }
@@ -110,7 +112,7 @@ app.get("/api/opportunities", async (context) => {
     );
   }
   const rows = await context.env.DB.prepare(
-    `SELECT o.*, a.name, a.artist_name, a.icon_url, a.track_view_url
+    `SELECT o.*, a.name, a.artist_name, a.icon_url, a.track_view_url, a.description
      FROM opportunities o
      JOIN apps a ON a.id = o.app_id
      WHERE o.lens = ?
@@ -138,7 +140,7 @@ app.get("/api/apps", async (context) => {
   if (ids.length === 0) return context.json({ items: [] });
   const placeholders = ids.map(() => "?").join(",");
   const rows = await context.env.DB.prepare(
-    `SELECT o.*, a.name, a.artist_name, a.icon_url, a.track_view_url
+    `SELECT o.*, a.name, a.artist_name, a.icon_url, a.track_view_url, a.description
      FROM opportunities o
      JOIN apps a ON a.id = o.app_id
      WHERE o.app_id IN (${placeholders})
@@ -156,7 +158,7 @@ app.get("/api/apps", async (context) => {
   const missing = ids.filter((id) => !seen.has(id));
   if (missing.length) {
     const more = await context.env.DB.prepare(
-      `SELECT id AS app_id, name, artist_name, icon_url, track_view_url, one_liner, genre_id
+      `SELECT id AS app_id, name, artist_name, icon_url, track_view_url, one_liner, genre_id, description
        FROM apps WHERE id IN (${missing.map(() => "?").join(",")})`,
     )
       .bind(...missing)
@@ -168,18 +170,20 @@ app.get("/api/apps", async (context) => {
         track_view_url: string | null;
         one_liner: string | null;
         genre_id: string | null;
+        description: string | null;
       }>();
     for (const row of more.results ?? []) {
       items.push({
         lens: "money_hated",
         appId: row.app_id,
         name: row.name,
-        nameZh: chineseName(row.name, row.genre_id),
+        nameZh: chineseName(row.name, row.genre_id, row.description),
         artistName: row.artist_name,
         iconUrl: row.icon_url,
         oneLiner: chineseOneLiner({
           name: row.name,
           oneLiner: row.one_liner,
+          description: row.description,
           genreId: row.genre_id,
         }),
         country: "jp",
@@ -292,7 +296,7 @@ app.get("/api/apps/:id", async (context) => {
     app: {
       id: appRow.id,
       name: appRow.name,
-      nameZh: chineseName(appRow.name, opp?.genre_id),
+      nameZh: chineseName(appRow.name, opp?.genre_id, appRow.description),
       artistName: appRow.artist_name,
       artistId: appRow.artist_id,
       iconUrl: appRow.icon_url,
@@ -300,6 +304,7 @@ app.get("/api/apps/:id", async (context) => {
       oneLiner: chineseOneLiner({
         name: appRow.name,
         oneLiner: appRow.one_liner,
+        description: appRow.description,
         genreId: opp?.genre_id,
         country,
         rank: opp?.rank,
@@ -356,17 +361,25 @@ app.post("/api/ingest", async (context) => {
     return context.json({ error: "unauthorized" }, 401);
   }
   if (context.req.query("rebuild") === "1") {
-    const latest = await latestIngest(context.env);
+    const lastOk = await context.env.DB.prepare(
+      "SELECT stats FROM ingest_runs WHERE status = 'success' ORDER BY id DESC LIMIT 1",
+    ).first<{ stats: string | null }>();
     let date: string | null = null;
-    if (latest?.stats) {
+    if (lastOk?.stats) {
       try {
-        date = (JSON.parse(latest.stats) as { date?: string }).date ?? null;
+        date = (JSON.parse(lastOk.stats) as { date?: string }).date ?? null;
       } catch {
         date = null;
       }
     }
+    if (!date) {
+      date =
+        (
+          await context.env.DB.prepare("SELECT MAX(snapshot_date) AS d FROM chart_ranks").first<{ d: string | null }>()
+        )?.d ?? null;
+    }
     if (!date) return context.json({ error: "no snapshot yet" }, 400);
-    const count = await rebuildOpportunities(context.env, date);
+    const count = await rebuildOpportunities(context.env, date, { reviews: false });
     return context.json({ ok: true, rebuilt: count, date });
   }
   if (await isIngestLocked(context.env)) {
