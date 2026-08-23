@@ -1,8 +1,8 @@
 # AppGap · App 趋势
 
-从 App Store **畅销榜**里找机会：用户在付钱，评分却很差。
+从 App Store **畅销榜 / 免费榜**里找需求：谁在付钱、谁被骂、哪类玩法正在涨。
 
-线上：https://appgap.01mvp.com
+线上：https://appgap.01mvp.com（内部工具，需要密码）
 
 ## 数据怎么来的
 
@@ -12,18 +12,20 @@
 - 评分和评价数：iTunes Lookup `itunes.apple.com/lookup?id=...&country=...`
 - 最近评价：`itunes.apple.com/{区}/rss/customerreviews/id={id}/json`
 
-覆盖日 / 美 / 英 / 韩 / 台 / 德 / 法 / 澳，品类是工具、效率、照片（刻意排除游戏，否则畅销榜会被买量游戏淹没）。
+覆盖美国、加拿大、英国、爱尔兰、德国、法国、瑞士、荷兰、瑞典、挪威、澳洲、新西兰、日本、韩国、新加坡、阿联酋、中国、香港、中国台湾。品类是工具、效率、照片、游戏。
 
-## 四个镜头
+## 镜头、筛选、名单
 
-| 镜头 | 怎么筛 |
+| 功能 | 做什么 |
 | --- | --- |
-| 赚钱但被骂 | 畅销榜上，评分 &lt; 4.0，评价足够多 |
-| 小团队爆款 | 打进免费榜或畅销榜，开发者不是 Google / 政府 / 超大厂 |
-| 跨地域缺口 | 一两个区很靠前，其他区几乎看不到 |
-| 单一市场霸主 | 只在一个区的榜上很靠前 |
-
-立项池 / 候选池存在浏览器本地，不经过服务器。
+| 赚钱的小工具 / 游戏 | 已经排进畅销榜 |
+| 差评可替换 | 畅销但评分掉在 4 以下 |
+| 新上榜 / 同类扎堆 / 小工作室 / 别国没有 | 其它需求发现镜头 |
+| 按国家 | 只看该国本期榜上的 App，台湾显示为「中国台湾」 |
+| 候选 | 先收藏看着，还没决定做。存在线上 D1 |
+| 立项 | 准备动手。存在线上 D1 |
+| 复制给 Codex | 把当前 App 或本页清单复制成 Markdown |
+| DeepSeek 分析 | 点一次，用 DeepSeek v4 Flash 写需求笔记。API Key 只在 Cloudflare Worker，不进前端 |
 
 ## 本地开发
 
@@ -35,10 +37,11 @@ pnpm dev:worker   # :8787
 pnpm dev          # :5173，/api 会转到 Worker
 ```
 
-第一次打开页面如果库是空的，Worker 会自己拉一次榜。也可以：
+本地密钥放在 `.dev.vars`（已 gitignore）：
 
-```bash
-curl -X POST http://127.0.0.1:8787/api/ingest
+```
+SITE_PASSWORD=...
+DEEPSEEK_API_KEY=...
 ```
 
 ## 部署
@@ -47,18 +50,21 @@ curl -X POST http://127.0.0.1:8787/api/ingest
 pnpm deploy
 ```
 
+生产密钥用 Wrangler secrets，不要写进仓库：
+
+```bash
+npx wrangler secret put SITE_PASSWORD
+npx wrangler secret put DEEPSEEK_API_KEY
+```
+
 域名：https://appgap.01mvp.com
 
-默认 **每周一 08:30（北京时间）** 扫一次榜。需求发现不需要每天看：留每周快照就能看出「新上榜 / 还在榜 / 掉下去」。
+默认 **每周一 08:30（北京时间）** 扫一次榜。
 
-Apple 会拦 Cloudflare 机房 IP（RSS 返回 403），所以线上 Worker 自己拉榜经常失败。日常更新走两条路（数据仍写进 Cloudflare D1，网站才能读）：
+Apple 会拦 Cloudflare 机房 IP（RSS 返回 403），所以线上 Worker 自己拉榜经常失败。日常更新走 GitHub Actions 或本机：
 
 ```bash
 pnpm ingest:prod          # 用你这台电脑的 IP 拉榜，写入线上 D1
 ```
-
-这台 Mac 已经挂了 launchd：每天 08:30 自动跑。日志在 `~/Library/Logs/appgap-ingest.log`。
-
-GitHub Actions 每天 08:30（北京时间）也会试一次；如果 GitHub 的 IP 也被 Apple 拦，就靠本机那条。
 
 没有新数据时，网站继续展示上一份快照。

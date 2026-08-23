@@ -182,7 +182,7 @@ export function localizeRegions(text: string): string {
     .replaceAll("韩区", "韩国")
     .replaceAll("美区", "美国")
     .replaceAll("英区", "英国")
-    .replaceAll("台区", "台湾")
+    .replaceAll("台区", "中国台湾")
     .replaceAll("德区", "德国")
     .replaceAll("法区", "法国")
     .replaceAll("澳区", "澳洲");

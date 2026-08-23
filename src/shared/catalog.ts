@@ -17,7 +17,7 @@ export const COUNTRIES = [
   { id: "ae", label: "阿联酋", name: "阿联酋" },
   { id: "cn", label: "中国", name: "中国" },
   { id: "hk", label: "香港", name: "香港" },
-  { id: "tw", label: "台湾", name: "台湾" },
+  { id: "tw", label: "中国台湾", name: "中国台湾" },
 ] as const;
 
 export const GENRES = [
@@ -43,6 +43,19 @@ export type GenreId = (typeof GENRES)[number]["id"];
 export type ChartId = (typeof CHARTS)[number]["id"];
 export type LensId = "paid_tools" | "paid_games" | "money_hated" | "fresh" | "cluster" | "indie_viral" | "geo_gap";
 export type PoolId = "watch" | "build";
+
+export const POOLS: Array<{ id: PoolId; label: string; hint: string }> = [
+  {
+    id: "watch",
+    label: "候选",
+    hint: "先收藏看着，还没决定做。点进 App 按「加入候选」。名单存在线上，换电脑也能看到。",
+  },
+  {
+    id: "build",
+    label: "立项",
+    hint: "准备动手的项目。从候选里看准了，再点「标记立项」。名单存在线上。",
+  },
+];
 
 export const LENSES: Array<{
   id: LensId;
@@ -101,6 +114,10 @@ export const DATA_SOURCE = {
     "定时任务跑在 GitHub Actions（每周一）。Cloudflare 机房 IP 会被 Apple 拦，失败就保留上一份快照。",
   ],
 };
+
+export function isCountryId(id: string): id is CountryId {
+  return COUNTRIES.some((item) => item.id === id);
+}
 
 export function countryLabel(id: string): string {
   return COUNTRIES.find((item) => item.id === id)?.label ?? id.toUpperCase();

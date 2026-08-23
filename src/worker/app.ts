@@ -1,9 +1,10 @@
 import { Hono } from "hono";
-import { analyzeApp } from "../shared/analysis";
-import { LENSES, lensById, type LensId, type PoolId } from "../shared/catalog";
-import type { AppDetail, OpportunityListResponse, OpportunityRow, RankPosition, ReviewItem } from "../shared/types";
-import { chineseName, chineseOneLiner, chineseReview, hasForeignScript, localizeRegions } from "../shared/translate";
-import { fetchReviews } from "./apple";
+import { isCountryId, LENSES, lensById, type LensId, type PoolId } from "../shared/catalog";
+import type { OpportunityListResponse, OpportunityRow, RankPosition } from "../shared/types";
+import { chineseName, chineseOneLiner, localizeRegions } from "../shared/translate";
+import { runDeepseekAnalysis } from "./ai";
+import { loadAppDetail } from "./detail";
+import type { RuntimeEnv } from "./env";
 import { isIngestLocked, latestIngest, lensCounts, rebuildOpportunities, runIngest } from "./ingest";
 
 type OppRecord = {
@@ -69,7 +70,18 @@ function mapRow(row: OppRecord): OpportunityRow {
   };
 }
 
-const app = new Hono<{ Bindings: Env }>();
+function uniqueByApp(rows: OppRecord[]): OppRecord[] {
+  const seen = new Map<string, OppRecord>();
+  for (const row of rows) {
+    const prev = seen.get(row.app_id);
+    if (!prev || row.rank < prev.rank || (row.rank === prev.rank && row.score > prev.score)) {
+      seen.set(row.app_id, row);
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.rank - b.rank || b.score - a.score).slice(0, 80);
+}
+
+const app = new Hono<{ Bindings: RuntimeEnv }>();
 
 app.get("/api/health", (context) => context.json({ ok: true }));
 
@@ -111,22 +123,57 @@ app.get("/api/opportunities", async (context) => {
       }),
     );
   }
-  const rows = await context.env.DB.prepare(
-    `SELECT o.*, a.name, a.artist_name, a.icon_url, a.track_view_url, a.description
-     FROM opportunities o
-     JOIN apps a ON a.id = o.app_id
-     WHERE o.lens = ?
-     ORDER BY o.score DESC, o.rank ASC
-     LIMIT 80`,
-  )
-    .bind(lens)
-    .all<OppRecord>();
+  const country = context.req.query("country") || "";
+  if (country && !isCountryId(country)) {
+    return context.json({ error: "unknown country" }, 400);
+  }
+  let items: OpportunityRow[];
+  if (country) {
+    const rows = await context.env.DB.prepare(
+      `SELECT o.lens, o.app_id, o.score,
+              cr.country AS country, o.chart AS chart, o.genre_id AS genre_id, cr.rank AS rank,
+              COALESCE(m.rating, o.rating) AS rating,
+              COALESCE(m.rating_count, o.rating_count) AS rating_count,
+              o.rank_change, o.consecutive_days, o.one_liner, o.payload,
+              a.name, a.artist_name, a.icon_url, a.track_view_url, a.description
+       FROM opportunities o
+       JOIN apps a ON a.id = o.app_id
+       JOIN (
+         SELECT app_id, country, MIN(rank) AS rank
+         FROM chart_ranks
+         WHERE country = ?
+           AND snapshot_date = (SELECT MAX(snapshot_date) FROM chart_ranks)
+         GROUP BY app_id, country
+       ) cr ON cr.app_id = o.app_id
+       LEFT JOIN app_metrics m
+         ON m.app_id = o.app_id AND m.country = cr.country
+        AND m.snapshot_date = (SELECT MAX(snapshot_date) FROM chart_ranks)
+       WHERE o.lens = ?
+       ORDER BY cr.rank ASC, o.score DESC
+       LIMIT 80`,
+    )
+      .bind(country, lens)
+      .all<OppRecord>();
+    items = uniqueByApp(rows.results ?? []).map(mapRow);
+  } else {
+    const rows = await context.env.DB.prepare(
+      `SELECT o.*, a.name, a.artist_name, a.icon_url, a.track_view_url, a.description
+       FROM opportunities o
+       JOIN apps a ON a.id = o.app_id
+       WHERE o.lens = ?
+       ORDER BY o.score DESC, o.rank ASC
+       LIMIT 80`,
+    )
+      .bind(lens)
+      .all<OppRecord>();
+    items = (rows.results ?? []).map(mapRow);
+  }
   const response: OpportunityListResponse = {
     lens,
     hint: lensById(lens).hint,
     snapshotDate: latest?.status === "success" ? (JSON.parse(latest.stats || "{}") as { date?: string }).date ?? null : null,
     ingesting: latest?.status === "running" || ((empty?.c ?? 0) === 0),
-    items: (rows.results ?? []).map(mapRow),
+    items,
   };
   return context.json(response);
 });
@@ -205,120 +252,41 @@ app.get("/api/apps", async (context) => {
 });
 
 app.get("/api/apps/:id", async (context) => {
+  const detail = await loadAppDetail(context.env, context.req.param("id"));
+  if (!detail) return context.json({ error: "not found" }, 404);
+  return context.json(detail);
+});
+
+app.post("/api/apps/:id/analyze", async (context) => {
   const id = context.req.param("id");
-  const appRow = await context.env.DB.prepare("SELECT * FROM apps WHERE id = ?").bind(id).first<{
-    id: string;
-    name: string;
-    artist_id: string | null;
-    artist_name: string;
-    icon_url: string | null;
-    description: string | null;
-    one_liner: string | null;
-    genre_name: string | null;
-    formatted_price: string | null;
-    track_view_url: string | null;
-  }>();
-  if (!appRow) return context.json({ error: "not found" }, 404);
-
-  const opp = await context.env.DB.prepare(
-    "SELECT * FROM opportunities WHERE app_id = ? ORDER BY score DESC LIMIT 1",
-  ).bind(id).first<{
-    country: string;
-    rank: number;
-    genre_id: string;
-    rating: number | null;
-    rating_count: number | null;
-  }>();
-
-  const positions = await context.env.DB.prepare(
-    `SELECT r.country, r.chart, r.genre_id AS genreId, r.rank, m.rating, m.rating_count AS ratingCount
-     FROM chart_ranks r
-     LEFT JOIN app_metrics m
-       ON m.app_id = r.app_id AND m.country = r.country AND m.snapshot_date = r.snapshot_date
-     WHERE r.app_id = ?
-       AND r.snapshot_date = (SELECT MAX(snapshot_date) FROM chart_ranks)
-     ORDER BY r.rank ASC`,
-  )
-    .bind(id)
-    .all<{ country: string; chart: OpportunityRow["chart"]; genreId: string; rank: number; rating: number | null; ratingCount: number | null }>();
-
-  const history = await context.env.DB.prepare(
-    `SELECT snapshot_date AS date, country, chart, genre_id AS genreId, rank
-     FROM chart_ranks WHERE app_id = ? ORDER BY snapshot_date DESC, rank ASC LIMIT 40`,
-  )
-    .bind(id)
-    .all<{ date: string; country: string; chart: string; genreId: string; rank: number }>();
-
-  const country = opp?.country || positions.results?.[0]?.country || "us";
-  const stored = await context.env.DB.prepare(
-    `SELECT rating, title, content, author FROM app_reviews
-     WHERE app_id = ? AND country = ?
-     ORDER BY rating ASC LIMIT 20`,
-  )
-    .bind(id, country)
-    .all<{ rating: number | null; title: string; content: string; author: string }>();
-  function toZhReview(row: { rating: number | null; title: string; content: string; author: string }): ReviewItem {
-    const titleZh = chineseReview(row.title);
-    const contentZh = chineseReview(row.content);
-    return {
-      rating: row.rating,
-      title: titleZh || row.title,
-      content: contentZh || row.content,
-      titleOriginal: hasForeignScript(row.title) ? row.title : null,
-      contentOriginal: hasForeignScript(row.content) ? row.content : null,
-      author: row.author,
-      updated: null,
-    };
-  }
-  let reviews: AppDetail["reviews"] = (stored.results ?? []).map(toZhReview);
-  if (reviews.length === 0) {
+  const fresh = context.req.query("fresh") === "1";
+  if (!fresh) {
     try {
-      reviews = (await fetchReviews(id, country))
-        .slice()
-        .sort((a, b) => (a.rating ?? 5) - (b.rating ?? 5))
-        .map((row) => toZhReview(row));
+      const cached = await context.env.DB.prepare(
+        "SELECT markdown, created_at AS createdAt FROM ai_analyses WHERE app_id = ?",
+      )
+        .bind(id)
+        .first<{ markdown: string; createdAt: string }>();
+      if (cached) return context.json({ markdown: cached.markdown, createdAt: cached.createdAt, cached: true });
     } catch {
-      reviews = [];
+      // table may not exist yet
     }
   }
-
-  const analysis = analyzeApp({
-    name: appRow.name,
-    country,
-    rank: opp?.rank || positions.results?.[0]?.rank || 0,
-    genreId: opp?.genre_id || positions.results?.[0]?.genreId || "6002",
-    rating: opp?.rating ?? null,
-    ratingCount: opp?.rating_count ?? null,
-    reviews,
-  });
-
-  const detail: AppDetail = {
-    app: {
-      id: appRow.id,
-      name: appRow.name,
-      nameZh: chineseName(appRow.name, opp?.genre_id, appRow.description),
-      artistName: appRow.artist_name,
-      artistId: appRow.artist_id,
-      iconUrl: appRow.icon_url,
-      description: appRow.description,
-      oneLiner: chineseOneLiner({
-        name: appRow.name,
-        oneLiner: appRow.one_liner,
-        description: appRow.description,
-        genreId: opp?.genre_id,
-        country,
-        rank: opp?.rank,
-      }),
-      genreName: appRow.genre_name,
-      formattedPrice: appRow.formatted_price,
-      trackViewUrl: appRow.track_view_url,
-    },
-    positions: positions.results ?? [],
-    history: history.results ?? [],
-    reviews,
-    analysis,
-  };
-  return context.json(detail);
+  const detail = await loadAppDetail(context.env, id);
+  if (!detail) return context.json({ error: "not found" }, 404);
+  try {
+    const markdown = await runDeepseekAnalysis(context.env, detail);
+    const createdAt = new Date().toISOString();
+    await context.env.DB.prepare(
+      "INSERT OR REPLACE INTO ai_analyses (app_id, markdown, created_at) VALUES (?, ?, ?)",
+    )
+      .bind(id, markdown, createdAt)
+      .run();
+    return context.json({ markdown, createdAt, cached: false });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return context.json({ error: message }, 502);
+  }
 });
 
 app.get("/api/pools", async (context) => {
@@ -355,7 +323,7 @@ app.post("/api/pools", async (context) => {
 });
 
 app.post("/api/ingest", async (context) => {
-  const secret = (context.env as Env & { INGEST_SECRET?: string }).INGEST_SECRET;
+  const secret = context.env.INGEST_SECRET;
   const given = context.req.header("authorization")?.replace(/^Bearer\s+/i, "") || context.req.query("key");
   if (secret && given !== secret) {
     return context.json({ error: "unauthorized" }, 401);
