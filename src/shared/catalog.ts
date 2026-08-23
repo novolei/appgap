@@ -1,14 +1,23 @@
 export const COUNTRIES = [
-  { id: "cn", label: "中国", name: "中国" },
-  { id: "hk", label: "香港", name: "香港" },
-  { id: "jp", label: "日本", name: "日本" },
   { id: "us", label: "美国", name: "美国" },
+  { id: "ca", label: "加拿大", name: "加拿大" },
   { id: "gb", label: "英国", name: "英国" },
-  { id: "kr", label: "韩国", name: "韩国" },
-  { id: "tw", label: "台湾", name: "台湾" },
+  { id: "ie", label: "爱尔兰", name: "爱尔兰" },
   { id: "de", label: "德国", name: "德国" },
   { id: "fr", label: "法国", name: "法国" },
+  { id: "ch", label: "瑞士", name: "瑞士" },
+  { id: "nl", label: "荷兰", name: "荷兰" },
+  { id: "se", label: "瑞典", name: "瑞典" },
+  { id: "no", label: "挪威", name: "挪威" },
   { id: "au", label: "澳洲", name: "澳洲" },
+  { id: "nz", label: "新西兰", name: "新西兰" },
+  { id: "jp", label: "日本", name: "日本" },
+  { id: "kr", label: "韩国", name: "韩国" },
+  { id: "sg", label: "新加坡", name: "新加坡" },
+  { id: "ae", label: "阿联酋", name: "阿联酋" },
+  { id: "cn", label: "中国", name: "中国" },
+  { id: "hk", label: "香港", name: "香港" },
+  { id: "tw", label: "台湾", name: "台湾" },
 ] as const;
 
 export const GENRES = [
@@ -77,13 +86,16 @@ export const LENSES: Array<{
   },
 ];
 
+const MARKET_NAMES = COUNTRIES.map((item) => item.name).join("、");
+const SCAN_FEEDS = COUNTRIES.length * GENRES.length * CHARTS.length;
+
 export const DATA_SOURCE = {
   title: "数据来源",
   summary: "每周一扫描 Apple 公开榜单，不是全量 App Store。",
   bullets: [
     "接口来自 Apple 公开 RSS 和 iTunes Lookup，不经过 Sensor Tower、七麦或 App Store Connect。",
-    "每次扫描：10 个市场 × 工具/效率/照片/游戏 × 畅销榜+免费榜，每份最多 100 名。去重后大约一千多个 App。",
-    "市场含中国、香港、日本、美国、英国、韩国、台湾、德国、法国、澳洲。",
+    `每次扫描：${COUNTRIES.length} 个市场 × 工具/效率/照片/游戏 × 畅销榜+免费榜（${SCAN_FEEDS} 份），每份最多 100 名。`,
+    `市场偏定价/付费率较高的店：${MARKET_NAMES}。`,
     "没有官方下载量和收入数字。畅销榜大致按付费+内购排序，免费榜大致按下载排序。",
     "Apple 没有官方「限免」榜。AppRaven 这类产品有限免列表，但没有稳定公开 API，所以还没接入。",
     "定时任务跑在 GitHub Actions（每周一）。Cloudflare 机房 IP 会被 Apple 拦，失败就保留上一份快照。",

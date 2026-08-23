@@ -272,7 +272,7 @@ export function classifyOpportunities(input: {
     }
 
     const missing = countryCount - countriesPresent.size;
-    if (!official && bestRank <= 20 && missing >= 4) {
+    if (!official && bestRank <= 20 && missing >= Math.max(4, countryCount - 6)) {
       const score = (21 - bestRank) * missing * 8;
       const missingLabels = COUNTRIES.filter((item) => !countriesPresent.has(item.id))
         .map((item) => item.label)
