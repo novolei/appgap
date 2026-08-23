@@ -3,6 +3,26 @@ import app from "./worker/app";
 import type { RuntimeEnv } from "./worker/env";
 import { expireStaleIngest, isIngestLocked, runIngest } from "./worker/ingest";
 
+function jsonError(error: string, status: number) {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
+}
+
+function isLocalhost(url: URL) {
+  return url.hostname === "127.0.0.1" || url.hostname === "localhost";
+}
+
+async function canCallIngest(request: Request, env: RuntimeEnv, url: URL): Promise<boolean> {
+  if (await isAuthed(request, env)) return true;
+  if (isLocalhost(url)) return true;
+  const secret = env.INGEST_SECRET;
+  if (!secret) return false;
+  const given = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || url.searchParams.get("key");
+  return given === secret;
+}
+
 export default {
   async fetch(request: Request, env: RuntimeEnv, ctx: ExecutionContext) {
     const url = new URL(request.url);
@@ -13,14 +33,13 @@ export default {
     if (url.pathname === "/api/health") {
       return app.fetch(request, env, ctx);
     }
+    if (url.pathname === "/api/ingest") {
+      if (!(await canCallIngest(request, env, url))) return jsonError("unauthorized", 401);
+      return app.fetch(request, env, ctx);
+    }
     const authed = await isAuthed(request, env);
     if (!authed) {
-      if (url.pathname.startsWith("/api/")) {
-        return new Response(JSON.stringify({ error: "unauthorized" }), {
-          status: 401,
-          headers: { "content-type": "application/json; charset=utf-8" },
-        });
-      }
+      if (url.pathname.startsWith("/api/")) return jsonError("unauthorized", 401);
       return loginPage();
     }
     const response = await app.fetch(request, env, ctx);
