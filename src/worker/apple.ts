@@ -1,8 +1,26 @@
 import { CHARTS, COUNTRIES, GENRES, type ChartId } from "../shared/catalog";
 import type { ReviewItem } from "../shared/types";
 
-const APPLE_UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+const APPLE_UAS = [
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+  "iTunes/12.12.4 (Macintosh; OS X 10.15.7) AppleWebKit/605.1.15",
+];
+
+export const LOOKUP_CHUNK_SIZE = 10;
+
+class AppleHttpError extends Error {
+  status: number;
+  url: string;
+  constructor(status: number, url: string) {
+    super(`${status} ${url}`);
+    this.status = status;
+    this.url = url;
+  }
+}
+
+function isForbidden(error: unknown): boolean {
+  return error instanceof AppleHttpError && error.status === 403;
+}
 
 export type ChartEntry = {
   appId: string;
@@ -45,15 +63,16 @@ async function fetchJson(url: string, attempts = 3): Promise<unknown> {
   for (let i = 0; i < attempts; i += 1) {
     try {
       const response = await fetch(url, {
-        headers: { "User-Agent": APPLE_UA, Accept: "application/json" },
+        headers: { "User-Agent": APPLE_UAS[i % APPLE_UAS.length], Accept: "application/json" },
       });
       if (response.status === 404) return null;
       if (!response.ok) {
-        throw new Error(`${response.status} ${url}`);
+        throw new AppleHttpError(response.status, url);
       }
       return await response.json();
     } catch (error) {
       lastError = error;
+      if (isForbidden(error) && i === attempts - 1) break;
       await new Promise((resolve) => setTimeout(resolve, 250 * (i + 1)));
     }
   }
@@ -117,37 +136,59 @@ export async function fetchChart(input: {
   }).filter((item) => item.appId);
 }
 
+function parseLookupResults(json: { results?: Array<Record<string, unknown>> } | null): LookupApp[] {
+  const out: LookupApp[] = [];
+  for (const result of json?.results ?? []) {
+    if (result.kind && result.kind !== "software") continue;
+    const trackId = result.trackId;
+    if (trackId == null) continue;
+    const rating = result.averageUserRating;
+    const count = result.userRatingCount;
+    out.push({
+      appId: String(trackId),
+      name: String(result.trackName ?? ""),
+      artistName: String(result.artistName ?? ""),
+      artistId: result.artistId != null ? String(result.artistId) : null,
+      bundleId: typeof result.bundleId === "string" ? result.bundleId : null,
+      iconUrl:
+        typeof result.artworkUrl100 === "string"
+          ? result.artworkUrl100.replace("100x100", "256x256")
+          : null,
+      genreId: result.primaryGenreId != null ? String(result.primaryGenreId) : null,
+      genreName: typeof result.primaryGenreName === "string" ? result.primaryGenreName : null,
+      description: typeof result.description === "string" ? result.description.slice(0, 2000) : null,
+      formattedPrice: typeof result.formattedPrice === "string" ? result.formattedPrice : null,
+      trackViewUrl: typeof result.trackViewUrl === "string" ? result.trackViewUrl : null,
+      rating: typeof rating === "number" ? rating : null,
+      ratingCount: typeof count === "number" ? count : null,
+    });
+  }
+  return out;
+}
+
+async function lookupChunk(ids: string[], country: string): Promise<LookupApp[]> {
+  const url = `https://itunes.apple.com/lookup?id=${ids.join(",")}&country=${country}`;
+  const json = (await fetchJson(url, 2)) as { results?: Array<Record<string, unknown>> } | null;
+  return parseLookupResults(json);
+}
+
 export async function lookupApps(ids: string[], country: string): Promise<LookupApp[]> {
   const unique = [...new Set(ids.filter(Boolean))];
   const out: LookupApp[] = [];
-  for (let i = 0; i < unique.length; i += 100) {
-    const chunk = unique.slice(i, i + 100);
-    const url = `https://itunes.apple.com/lookup?id=${chunk.join(",")}&country=${country}`;
-    const json = (await fetchJson(url)) as { results?: Array<Record<string, unknown>> } | null;
-    for (const result of json?.results ?? []) {
-      if (result.kind && result.kind !== "software") continue;
-      const trackId = result.trackId;
-      if (trackId == null) continue;
-      const rating = result.averageUserRating;
-      const count = result.userRatingCount;
-      out.push({
-        appId: String(trackId),
-        name: String(result.trackName ?? ""),
-        artistName: String(result.artistName ?? ""),
-        artistId: result.artistId != null ? String(result.artistId) : null,
-        bundleId: typeof result.bundleId === "string" ? result.bundleId : null,
-        iconUrl:
-          typeof result.artworkUrl100 === "string"
-            ? result.artworkUrl100.replace("100x100", "256x256")
-            : null,
-        genreId: result.primaryGenreId != null ? String(result.primaryGenreId) : null,
-        genreName: typeof result.primaryGenreName === "string" ? result.primaryGenreName : null,
-        description: typeof result.description === "string" ? result.description.slice(0, 2000) : null,
-        formattedPrice: typeof result.formattedPrice === "string" ? result.formattedPrice : null,
-        trackViewUrl: typeof result.trackViewUrl === "string" ? result.trackViewUrl : null,
-        rating: typeof rating === "number" ? rating : null,
-        ratingCount: typeof count === "number" ? count : null,
-      });
+  let consecutiveFails = 0;
+  for (let i = 0; i < unique.length; i += LOOKUP_CHUNK_SIZE) {
+    const chunk = unique.slice(i, i + LOOKUP_CHUNK_SIZE);
+    try {
+      const found = await lookupChunk(chunk, country);
+      out.push(...found);
+      consecutiveFails = 0;
+    } catch (error) {
+      consecutiveFails += 1;
+      console.error("lookup chunk failed", country, chunk.length, error);
+      if (consecutiveFails >= 3) {
+        console.error("lookup giving up for country", country);
+        break;
+      }
     }
   }
   return out;

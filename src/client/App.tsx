@@ -116,7 +116,7 @@ export function App() {
   const [country, setCountry] = useState(initial.country);
   const [items, setItems] = useState<OpportunityRow[]>([]);
   const [hint, setHint] = useState(LENSES[0].hint);
-  const [ingesting, setIngesting] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(initial.appId);
@@ -173,11 +173,12 @@ export function App() {
     let cancelled = false;
     async function load() {
       setError(null);
+      setLoading(true);
+      setItems([]);
       try {
         const meta = await fetchMeta();
         if (cancelled) return;
         setUpdatedAt(meta.lastSuccessAt);
-        setIngesting(meta.ingesting);
         if (lens === "watch" || lens === "build") {
           const ids = pools[lens];
           const remote = await fetchAppsByIds(ids);
@@ -191,20 +192,17 @@ export function App() {
         if (cancelled) return;
         setItems(data.items);
         setHint(data.hint);
-        setIngesting(data.ingesting && data.items.length === 0);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "加载失败");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
     void load();
-    const timer = window.setInterval(() => {
-      if (ingesting) void load();
-    }, 4000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
     };
-  }, [lens, ingesting, pools, country]);
+  }, [lens, pools, country]);
 
   useEffect(() => {
     setAiText(null);
@@ -316,7 +314,7 @@ export function App() {
             </button>
           </p>
         </div>
-        <div className="hero-meta">{ingesting ? "正在同步榜单" : relativeTime(updatedAt)}</div>
+        <div className="hero-meta">{relativeTime(updatedAt)}</div>
       </header>
 
       <label className="search">
@@ -363,9 +361,15 @@ export function App() {
 
       <div className="list">
         {error && <div className="empty">{error}</div>}
-        {!error && ingesting && items.length === 0 && <div className="banner">正在从 Apple 公开榜单拉数据，稍等片刻。</div>}
-        {!error && !ingesting && filtered.length === 0 && (
-          <div className="empty">{country ? "这个国家这一栏暂时没有。" : "这一栏暂时是空的。"}</div>
+        {!error && loading && items.length === 0 && <div className="empty">正在读取已缓存的榜单。</div>}
+        {!error && !loading && filtered.length === 0 && (
+          <div className="empty">
+            {updatedAt
+              ? country
+                ? "这个国家这一栏暂时没有。"
+                : "这一栏暂时是空的。"
+              : "还没有扫描结果。每周一会自动写入 D1，打开网站只读缓存。"}
+          </div>
         )}
         {filtered.map((item, index) => (
           <button

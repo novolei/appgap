@@ -5,7 +5,17 @@ import { chineseName, chineseOneLiner, localizeRegions } from "../shared/transla
 import { runDeepseekAnalysis } from "./ai";
 import { loadAppDetail } from "./detail";
 import type { RuntimeEnv } from "./env";
-import { isIngestLocked, latestIngest, lensCounts, rebuildOpportunities, runIngest } from "./ingest";
+import { isActivelyIngesting } from "./ingestStatus";
+import {
+  expireStaleIngest,
+  isIngestLocked,
+  latestIngest,
+  latestSuccessfulIngest,
+  lensCounts,
+  rebuildOpportunities,
+  runIngest,
+  snapshotDateFromStats,
+} from "./ingest";
 
 type OppRecord = {
   lens: LensId;
@@ -86,25 +96,15 @@ const app = new Hono<{ Bindings: RuntimeEnv }>();
 app.get("/api/health", (context) => context.json({ ok: true }));
 
 app.get("/api/meta", async (context) => {
+  await expireStaleIngest(context.env);
   const latest = await latestIngest(context.env);
-  const lastOk = await context.env.DB.prepare(
-    "SELECT finished_at, stats FROM ingest_runs WHERE status = 'success' ORDER BY id DESC LIMIT 1",
-  ).first<{ finished_at: string | null; stats: string | null }>();
+  const lastOk = await latestSuccessfulIngest(context.env);
   const counts = await lensCounts(context.env);
-  let snapshotDate: string | null = null;
-  const stats = lastOk?.stats || (latest?.status === "success" ? latest.stats : null);
-  if (stats) {
-    try {
-      snapshotDate = (JSON.parse(stats) as { date?: string }).date ?? null;
-    } catch {
-      snapshotDate = null;
-    }
-  }
   return context.json({
-    lastSuccessAt: lastOk?.finished_at ?? (latest?.status === "success" ? latest.finished_at : null),
+    lastSuccessAt: lastOk?.finished_at ?? null,
     lastStatus: latest?.status ?? null,
-    snapshotDate,
-    ingesting: latest?.status === "running",
+    snapshotDate: snapshotDateFromStats(lastOk?.stats),
+    ingesting: isActivelyIngesting(latest),
     counts,
   });
 });
@@ -114,15 +114,9 @@ app.get("/api/opportunities", async (context) => {
   if (!LENSES.some((item) => item.id === lens)) {
     return context.json({ error: "unknown lens" }, 400);
   }
+  await expireStaleIngest(context.env);
   const latest = await latestIngest(context.env);
-  const empty = await context.env.DB.prepare("SELECT COUNT(*) AS c FROM opportunities").first<{ c: number }>();
-  if ((empty?.c ?? 0) === 0 && !(await isIngestLocked(context.env))) {
-    context.executionCtx.waitUntil(
-      runIngest(context.env, { source: "lazy" }).catch((error) => {
-        console.error("lazy ingest failed", error);
-      }),
-    );
-  }
+  const lastOk = await latestSuccessfulIngest(context.env);
   const country = context.req.query("country") || "";
   if (country && !isCountryId(country)) {
     return context.json({ error: "unknown country" }, 400);
@@ -171,8 +165,8 @@ app.get("/api/opportunities", async (context) => {
   const response: OpportunityListResponse = {
     lens,
     hint: lensById(lens).hint,
-    snapshotDate: latest?.status === "success" ? (JSON.parse(latest.stats || "{}") as { date?: string }).date ?? null : null,
-    ingesting: latest?.status === "running" || ((empty?.c ?? 0) === 0),
+    snapshotDate: snapshotDateFromStats(lastOk?.stats),
+    ingesting: isActivelyIngesting(latest),
     items,
   };
   return context.json(response);
@@ -351,10 +345,18 @@ app.post("/api/ingest", async (context) => {
     return context.json({ ok: true, rebuilt: count, date });
   }
   if (await isIngestLocked(context.env)) {
-    return context.json({ ok: true, ingesting: true });
+    return context.json({ ok: false, ingesting: true, error: "ingest already running" }, 409);
   }
-  const stats = await runIngest(context.env, { source: "manual" });
-  return context.json({ ok: true, stats });
+  try {
+    const stats = await runIngest(context.env, { source: "manual" });
+    return context.json({ ok: true, stats });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("already running")) {
+      return context.json({ ok: false, ingesting: true, error: message }, 409);
+    }
+    return context.json({ ok: false, error: message }, 502);
+  }
 });
 
 export default app;

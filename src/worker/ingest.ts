@@ -2,6 +2,17 @@ import { buildOneLiner } from "../shared/oneLiner";
 import { buildHistoryIndex, classifyOpportunities, type AppSnapshot, type MetricSnapshot, type RankRecord } from "../shared/classify";
 import type { LensId } from "../shared/catalog";
 import { fetchChart, fetchReviews, INGEST_JOBS, lookupApps, mapPool, tokyoDate, type ChartEntry, type LookupApp } from "./apple";
+import {
+  isActivelyIngesting,
+  isStaleRunning,
+  type IngestRunRow,
+} from "./ingestStatus";
+
+export { snapshotDateFromStats } from "./ingestStatus";
+
+const MIN_CHART_ROWS = 1000;
+const OPPORTUNITY_COLUMNS =
+  "lens, app_id, score, country, chart, genre_id, rank, rating, rating_count, rank_change, consecutive_days, one_liner, payload";
 
 export type IngestStats = {
   date: string;
@@ -43,6 +54,10 @@ function mergeApp(entry: ChartEntry, lookup: LookupApp | undefined): AppSnapshot
 }
 
 export async function runIngest(env: Env, input: { source: string }): Promise<IngestStats> {
+  await expireStaleIngest(env);
+  if (await isIngestLocked(env)) {
+    throw new Error("ingest already running");
+  }
   const started = new Date().toISOString();
   const date = tokyoDate();
   const inserted = await env.DB.prepare(
@@ -62,8 +77,10 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
       }
     });
     const entries = chartResults.flat();
-    if (entries.length === 0) {
-      throw new Error("Apple 榜单全部失败（Cloudflare IP 常被 403）。请在本地 wrangler dev 拉一次再写入远端 D1。");
+    if (entries.length < MIN_CHART_ROWS) {
+      throw new Error(
+        `Apple 榜单不完整（${entries.length} 条，至少 ${MIN_CHART_ROWS}）。Cloudflare IP 常被 403。已保留上一份 D1 快照。`,
+      );
     }
     const idsByCountry = new Map<string, Set<string>>();
     for (const entry of entries) {
@@ -74,11 +91,15 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
 
     const lookups = new Map<string, LookupApp>();
     for (const [country, ids] of idsByCountry) {
-      const found = await lookupApps([...ids], country);
-      for (const item of found) {
-        const key = `${country}:${item.appId}`;
-        lookups.set(key, item);
-        if (!lookups.has(item.appId)) lookups.set(item.appId, item);
+      try {
+        const found = await lookupApps([...ids], country);
+        for (const item of found) {
+          const key = `${country}:${item.appId}`;
+          lookups.set(key, item);
+          if (!lookups.has(item.appId)) lookups.set(item.appId, item);
+        }
+      } catch (error) {
+        console.error("lookup country failed", country, error);
       }
     }
 
@@ -243,9 +264,13 @@ export async function rebuildOpportunities(env: Env, date: string, options: { re
       }),
   });
 
-  await env.DB.prepare("DELETE FROM opportunities").run();
+  if (opportunities.length === 0) {
+    throw new Error("分类结果为空，保留上一份 D1 快照");
+  }
+
+  await env.DB.prepare("DELETE FROM opportunities_staging").run();
   const oppInsert = env.DB.prepare(
-    `INSERT INTO opportunities (lens, app_id, score, country, chart, genre_id, rank, rating, rating_count, rank_change, consecutive_days, one_liner, payload)
+    `INSERT INTO opportunities_staging (${OPPORTUNITY_COLUMNS})
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   await batchRun(
@@ -268,6 +293,10 @@ export async function rebuildOpportunities(env: Env, date: string, options: { re
       ),
     ),
   );
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM opportunities"),
+    env.DB.prepare(`INSERT INTO opportunities (${OPPORTUNITY_COLUMNS}) SELECT ${OPPORTUNITY_COLUMNS} FROM opportunities_staging`),
+  ]);
   const oneLinerUpdate = env.DB.prepare("UPDATE apps SET one_liner = ? WHERE id = ?");
   await batchRun(
     env.DB,
@@ -312,21 +341,34 @@ export async function rebuildOpportunities(env: Env, date: string, options: { re
 
 export async function latestIngest(env: Env) {
   return env.DB.prepare(
-    "SELECT started_at, finished_at, status, stats, error FROM ingest_runs ORDER BY id DESC LIMIT 1",
-  ).first<{
-    started_at: string;
-    finished_at: string | null;
-    status: string;
-    stats: string | null;
-    error: string | null;
-  }>();
+    "SELECT id, source, started_at, finished_at, status, stats, error FROM ingest_runs ORDER BY id DESC LIMIT 1",
+  ).first<IngestRunRow>();
+}
+
+export async function latestSuccessfulIngest(env: Env) {
+  return env.DB.prepare(
+    "SELECT id, source, started_at, finished_at, status, stats, error FROM ingest_runs WHERE status = 'success' ORDER BY id DESC LIMIT 1",
+  ).first<IngestRunRow>();
+}
+
+export async function expireStaleIngest(env: Env): Promise<void> {
+  const latest = await latestIngest(env);
+  if (!latest || latest.status !== "running") return;
+  if (!isStaleRunning(latest.started_at)) return;
+  await env.DB.prepare(
+    "UPDATE ingest_runs SET finished_at = ?, status = 'error', error = ? WHERE id = ? AND status = 'running'",
+  )
+    .bind(
+      new Date().toISOString(),
+      "ingest timed out，已改用上一份 D1 快照",
+      latest.id,
+    )
+    .run();
 }
 
 export async function isIngestLocked(env: Env): Promise<boolean> {
-  const latest = await latestIngest(env);
-  if (!latest || latest.status !== "running") return false;
-  const started = Date.parse(latest.started_at);
-  return Number.isFinite(started) && Date.now() - started < 12 * 60 * 1000;
+  await expireStaleIngest(env);
+  return isActivelyIngesting(await latestIngest(env));
 }
 
 export async function lensCounts(env: Env): Promise<Record<LensId, number>> {

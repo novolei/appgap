@@ -2,7 +2,8 @@ name: Weekly ingest
 
 on:
   schedule:
-    - cron: "30 0 * * 1"
+    # 90 minutes after the Worker cron (00:30 UTC), in case Apple blocked Cloudflare IPs.
+    - cron: "0 2 * * 1"
   workflow_dispatch:
 
 jobs:

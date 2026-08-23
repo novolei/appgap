@@ -59,12 +59,10 @@ npx wrangler secret put DEEPSEEK_API_KEY
 
 域名：https://appgap.01mvp.com
 
-默认 **每周一 08:30（北京时间）** 扫一次榜。
+默认 **每周一 08:30（北京时间）** 扫一次榜，结果写入 D1。打开 https://appgap.01mvp.com 只读这份缓存，不会现场去拉 Apple。
 
-Apple 会拦 Cloudflare 机房 IP（RSS 返回 403），所以线上 Worker 自己拉榜经常失败。日常更新走 GitHub Actions 或本机：
+Apple 有时会拦 Cloudflare 机房 IP。Worker 拉失败就保留上一份快照；约 90 分钟后 GitHub Actions 会再用非 Cloudflare IP 补拉一次。本机也可以手动写入：
 
 ```bash
 pnpm ingest:prod          # 用你这台电脑的 IP 拉榜，写入线上 D1
 ```
-
-没有新数据时，网站继续展示上一份快照。

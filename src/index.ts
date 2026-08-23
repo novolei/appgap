@@ -1,7 +1,7 @@
 import { isAuthed, loginPage, loginResponse } from "./worker/auth";
 import app from "./worker/app";
 import type { RuntimeEnv } from "./worker/env";
-import { runIngest } from "./worker/ingest";
+import { expireStaleIngest, isIngestLocked, runIngest } from "./worker/ingest";
 
 export default {
   async fetch(request: Request, env: RuntimeEnv, ctx: ExecutionContext) {
@@ -30,6 +30,14 @@ export default {
     return response;
   },
   scheduled(controller, env, ctx) {
-    ctx.waitUntil(runIngest(env, { source: `cron:${controller.cron}` }));
+    ctx.waitUntil(
+      (async () => {
+        await expireStaleIngest(env);
+        if (await isIngestLocked(env)) return;
+        await runIngest(env, { source: `cron:${controller.cron}` });
+      })().catch((error) => {
+        console.error("cron ingest failed", error);
+      }),
+    );
   },
 } satisfies ExportedHandler<RuntimeEnv>;

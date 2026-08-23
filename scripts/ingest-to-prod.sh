@@ -50,7 +50,7 @@ trap cleanup EXIT
 
 ready=0
 for _ in $(seq 1 90); do
-  if curl -sf "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
+  if curl -sf -m 3 "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -68,7 +68,12 @@ if [ "$ready" != 1 ]; then
 fi
 
 echo "$(date '+%F %T') posting ingest" >>"$LOG"
-if ! curl -sf -m 300 -X POST "http://127.0.0.1:${PORT}/api/ingest" | tee -a "$LOG"; then
+RESP="$(curl -sS -m 480 -w "\n%{http_code}" -X POST "http://127.0.0.1:${PORT}/api/ingest" || true)"
+HTTP_CODE="$(printf '%s' "$RESP" | tail -n 1)"
+BODY="$(printf '%s' "$RESP" | sed '$d')"
+printf '%s\n' "$BODY" | tee -a "$LOG"
+echo "http $HTTP_CODE" >>"$LOG"
+if [ "$HTTP_CODE" != "200" ] || ! printf '%s' "$BODY" | grep -q '"stats"'; then
   echo "$(date '+%F %T') ingest failed" >>"$LOG"
   exit 1
 fi
