@@ -168,12 +168,36 @@ a {
   min-width: 0;
 }
 
-.zh {
-  font-size: 17px;
+.title {
+  font-size: 16px;
   font-weight: 650;
   display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 2px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.orig-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash {
+  color: var(--faint);
+  font-weight: 400;
+  flex: none;
+}
+
+.zh-name {
+  color: var(--muted);
+  font-weight: 550;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .orig,
@@ -188,6 +212,11 @@ a {
   color: var(--muted);
   font-size: 13px;
   margin-top: 2px;
+}
+
+.drawer-top h2 .zh-name {
+  font-weight: 500;
+  color: var(--muted);
 }
 
 .blurb {

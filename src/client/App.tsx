@@ -218,11 +218,16 @@ export function App() {
             <div className="rank">{String(index + 1).padStart(2, "0")}</div>
             {item.iconUrl ? <img className="icon" src={item.iconUrl} alt="" /> : <div className="icon" />}
             <div className="body">
-              <div className="zh">
-                {item.nameZh}
+              <div className="title">
+                <span className="orig-name">{item.name}</span>
+                {item.nameZh && item.nameZh !== item.name && (
+                  <>
+                    <span className="dash"> — </span>
+                    <span className="zh-name">{item.nameZh}</span>
+                  </>
+                )}
                 {pools.build.includes(item.appId) && <em className="badge">要做</em>}
               </div>
-              {item.nameZh !== item.name && <div className="orig">{item.name}</div>}
               <div className="blurb">{item.oneLiner}</div>
               <div className="artist">{item.artistName}</div>
             </div>
@@ -243,7 +248,7 @@ export function App() {
       </div>
 
       <p className="foot">
-        每周一扫描一次，不是每天。区域为中文国名；标题是干什么的，下面一行是商店原名。
+        每周一扫描一次，不是每天。标题是商店原名 — 中文名。
         {" · "}
         <button className="source-link" type="button" onClick={() => setShowSource(true)}>
           数据来源
@@ -287,8 +292,16 @@ export function App() {
                 )}
                 <div>
                   <div className="orig">{detail?.app.artistName || activeApp?.artistName}</div>
-                  <h2>{detail?.app.nameZh || activeApp?.nameZh}</h2>
-                  <div className="orig">{detail?.app.name || activeApp?.name}</div>
+                  <h2>
+                    {detail?.app.name || activeApp?.name}
+                    {(detail?.app.nameZh || activeApp?.nameZh) &&
+                      (detail?.app.nameZh || activeApp?.nameZh) !== (detail?.app.name || activeApp?.name) && (
+                        <>
+                          <span className="dash"> — </span>
+                          <span className="zh-name">{detail?.app.nameZh || activeApp?.nameZh}</span>
+                        </>
+                      )}
+                  </h2>
                   <div className="blurb">{detail?.app.oneLiner || activeApp?.oneLiner}</div>
                 </div>
               </div>
