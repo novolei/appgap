@@ -367,8 +367,19 @@ a {
   font-size: 12px;
 }
 
-.foot a {
+.foot a,
+.source-link {
   text-decoration: underline;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.source-drawer {
+  width: min(520px, 100%);
 }
 
 @media (max-width: 720px) {

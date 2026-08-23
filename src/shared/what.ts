@@ -27,6 +27,11 @@ export const APP_KINDS: AppKind[] = [
   { id: "dating", nameZh: "恋爱互动", what: "恋爱互动 / 情侣工具", re: /hope|戀愛|恋爱|dating|emotion companion/i },
   { id: "files", nameZh: "文件管理", what: "管理手机文件", re: /file.?manager|文件管理/i },
   { id: "ai-chat", nameZh: "AI 助手", what: "聊天机器人 / AI 助手", re: /chatbot|ai assistant|chatgpt|claude/i },
+  { id: "moba", nameZh: "MOBA 对战", what: "多人实时对战手游", re: /王者荣耀|honor of kings|wild rift|mobile legends|moba/i },
+  { id: "gacha", nameZh: "卡牌抽卡", what: "抽卡 / 养成手游", re: /gacha|抽卡|原神|崩坏|明日方舟|fgo|genshin/i },
+  { id: "puzzle", nameZh: "益智消除", what: "消除、解谜或排序休闲游戏", re: /puzzle|sudoku|match.?3|sort|消除|解谜|数独/i },
+  { id: "idle", nameZh: "放置挂机", what: "放置 / 挂机游戏", re: /idle|afk|放置|挂机/i },
+  { id: "sports-game", nameZh: "体育游戏", what: "球类或赛事手游", re: /soccer|football|baseball|野球|篮球|fifa|mlb|nba/i },
 ];
 
 export function detectKind(name: string, description = ""): AppKind | null {

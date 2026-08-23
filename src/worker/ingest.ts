@@ -335,6 +335,7 @@ export async function lensCounts(env: Env): Promise<Record<LensId, number>> {
   ).all<{ lens: LensId; count: number }>();
   const counts: Record<LensId, number> = {
     paid_tools: 0,
+    paid_games: 0,
     money_hated: 0,
     fresh: 0,
     cluster: 0,

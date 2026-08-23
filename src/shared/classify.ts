@@ -1,4 +1,4 @@
-import { COUNTRIES, countryLabel, type ChartId, type LensId } from "./catalog";
+import { COUNTRIES, countryLabel, isGameGenre, type ChartId, type LensId } from "./catalog";
 import { chineseName } from "./translate";
 import { detectKind } from "./what";
 import { isOfficialOrBigApp } from "./publishers";
@@ -174,7 +174,7 @@ export function classifyOpportunities(input: {
     const official = isOfficialOrBigApp(app.name, app.artistName);
     const streak = input.history.consecutiveDays(app.id, primary.country, primary.chart, primary.genreId);
 
-    if (!official && primary.chart === "grossing" && primary.rank <= 40) {
+    if (!official && primary.chart === "grossing" && primary.rank <= 40 && !isGameGenre(primary.genreId)) {
       result.push(
         rowFrom({
           lens: "paid_tools",
@@ -186,6 +186,22 @@ export function classifyOpportunities(input: {
           score: (50 - primary.rank) * 10 + ln(ratingCount ?? 1),
           oneLiner,
           reasons: [`${countryLabel(primary.country)}畅销榜第 ${primary.rank}`, "有人在为这个小工具付钱"],
+        }),
+      );
+    }
+
+    if (!official && primary.chart === "grossing" && primary.rank <= 40 && isGameGenre(primary.genreId)) {
+      result.push(
+        rowFrom({
+          lens: "paid_games",
+          app,
+          primary,
+          all: positions,
+          metric,
+          history: input.history,
+          score: (50 - primary.rank) * 10 + ln(ratingCount ?? 1),
+          oneLiner,
+          reasons: [`${countryLabel(primary.country)}游戏畅销榜第 ${primary.rank}`, "这套玩法正在收钱"],
         }),
       );
     }
@@ -256,7 +272,7 @@ export function classifyOpportunities(input: {
     }
 
     const missing = countryCount - countriesPresent.size;
-    if (!official && bestRank <= 20 && missing >= 3) {
+    if (!official && bestRank <= 20 && missing >= 4) {
       const score = (21 - bestRank) * missing * 8;
       const missingLabels = COUNTRIES.filter((item) => !countriesPresent.has(item.id))
         .map((item) => item.label)

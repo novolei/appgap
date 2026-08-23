@@ -1,4 +1,6 @@
 export const COUNTRIES = [
+  { id: "cn", label: "中国", name: "中国" },
+  { id: "hk", label: "香港", name: "香港" },
   { id: "jp", label: "日本", name: "日本" },
   { id: "us", label: "美国", name: "美国" },
   { id: "gb", label: "英国", name: "英国" },
@@ -13,7 +15,14 @@ export const GENRES = [
   { id: "6002", label: "工具", name: "Utilities" },
   { id: "6007", label: "效率", name: "Productivity" },
   { id: "6008", label: "照片", name: "Photo & Video" },
+  { id: "6014", label: "游戏", name: "Games" },
 ] as const;
+
+export const GAME_GENRE_ID = "6014";
+
+export function isGameGenre(genreId: string | null | undefined): boolean {
+  return genreId === GAME_GENRE_ID;
+}
 
 export const CHARTS = [
   { id: "grossing", rss: "topgrossingapplications", label: "畅销榜" },
@@ -23,7 +32,7 @@ export const CHARTS = [
 export type CountryId = (typeof COUNTRIES)[number]["id"];
 export type GenreId = (typeof GENRES)[number]["id"];
 export type ChartId = (typeof CHARTS)[number]["id"];
-export type LensId = "paid_tools" | "money_hated" | "fresh" | "cluster" | "indie_viral" | "geo_gap";
+export type LensId = "paid_tools" | "paid_games" | "money_hated" | "fresh" | "cluster" | "indie_viral" | "geo_gap";
 export type PoolId = "watch" | "build";
 
 export const LENSES: Array<{
@@ -35,6 +44,11 @@ export const LENSES: Array<{
     id: "paid_tools",
     label: "赚钱的小工具",
     hint: "工具 / 效率 / 照片类已经排进畅销榜。不看口碑，只看有没有人付钱——这是需求还在的信号。",
+  },
+  {
+    id: "paid_games",
+    label: "赚钱的游戏",
+    hint: "游戏畅销榜。大厂买量会很多，仍能看出哪类玩法正在收钱。",
   },
   {
     id: "money_hated",
@@ -62,6 +76,19 @@ export const LENSES: Array<{
     hint: "在某一两个国家很靠前，换个市场几乎没有。可以把玩法搬过去，或做本地化更深的替代。",
   },
 ];
+
+export const DATA_SOURCE = {
+  title: "数据来源",
+  summary: "每周一扫描 Apple 公开榜单，不是全量 App Store。",
+  bullets: [
+    "接口来自 Apple 公开 RSS 和 iTunes Lookup，不经过 Sensor Tower、七麦或 App Store Connect。",
+    "每次扫描：10 个市场 × 工具/效率/照片/游戏 × 畅销榜+免费榜，每份最多 100 名。去重后大约一千多个 App。",
+    "市场含中国、香港、日本、美国、英国、韩国、台湾、德国、法国、澳洲。",
+    "没有官方下载量和收入数字。畅销榜大致按付费+内购排序，免费榜大致按下载排序。",
+    "Apple 没有官方「限免」榜。AppRaven 这类产品有限免列表，但没有稳定公开 API，所以还没接入。",
+    "定时任务跑在 GitHub Actions（每周一）。Cloudflare 机房 IP 会被 Apple 拦，失败就保留上一份快照。",
+  ],
+};
 
 export function countryLabel(id: string): string {
   return COUNTRIES.find((item) => item.id === id)?.label ?? id.toUpperCase();

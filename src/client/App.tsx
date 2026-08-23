@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { LENSES, type LensId, type PoolId } from "../shared/catalog";
+import { DATA_SOURCE, LENSES, type LensId, type PoolId } from "../shared/catalog";
 import type { AppDetail, OpportunityRow } from "../shared/types";
 import { fetchAppDetail, fetchAppsByIds, fetchMeta, fetchOpportunities, fetchPools, savePool } from "./api";
 import { formatCount, formatRating, positionText, ratingTone, relativeTime } from "./format";
@@ -9,7 +9,7 @@ function parseHash(): { lens: LensId | PoolId; appId: string | null; q: string }
   const params = new URLSearchParams(window.location.hash.replace(/^#\/?/, "").replace(/^\/?/, ""));
   const raw = params.get("lens") === "local_king" ? "geo_gap" : params.get("lens") || "paid_tools";
   const lens = (
-    ["paid_tools", "money_hated", "fresh", "cluster", "indie_viral", "geo_gap", "watch", "build"].includes(raw)
+    ["paid_tools", "paid_games", "money_hated", "fresh", "cluster", "indie_viral", "geo_gap", "watch", "build"].includes(raw)
       ? raw
       : "paid_tools"
   ) as LensId | PoolId;
@@ -39,6 +39,7 @@ export function App() {
   const [detail, setDetail] = useState<AppDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [pools, setPools] = useState<PoolState>({ watch: [], build: [] });
+  const [showSource, setShowSource] = useState(false);
 
   useEffect(() => {
     writeHash(lens, activeId, query);
@@ -46,7 +47,10 @@ export function App() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setActiveId(null);
+      if (event.key === "Escape") {
+        setShowSource(false);
+        setActiveId(null);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -169,7 +173,12 @@ export function App() {
       <header className="hero">
         <div>
           <h1>AppGap</h1>
-          <p>每周扫一次各国畅销榜，用来发现能做的小工具需求。不用天天打开。</p>
+          <p>
+            每周扫一次各国畅销榜，用来发现能做的小工具和游戏需求。
+            <button className="source-link" type="button" onClick={() => setShowSource(true)}>
+              数据来源
+            </button>
+          </p>
         </div>
         <div className="hero-meta">{ingesting ? "正在同步榜单" : relativeTime(updatedAt)}</div>
       </header>
@@ -235,6 +244,10 @@ export function App() {
 
       <p className="foot">
         每周一扫描一次，不是每天。区域为中文国名；标题是干什么的，下面一行是商店原名。
+        {" · "}
+        <button className="source-link" type="button" onClick={() => setShowSource(true)}>
+          数据来源
+        </button>
         <br />
         <a href="https://01mvp.com" target="_blank" rel="noreferrer">
           01MVP
@@ -244,6 +257,25 @@ export function App() {
           GitHub
         </a>
       </p>
+
+      {showSource && (
+        <div className="overlay" onClick={() => setShowSource(false)}>
+          <aside className="drawer source-drawer" onClick={(event) => event.stopPropagation()}>
+            <div className="drawer-top">
+              <h2>{DATA_SOURCE.title}</h2>
+              <button className="close" onClick={() => setShowSource(false)} aria-label="关闭">
+                ×
+              </button>
+            </div>
+            <p className="lede">{DATA_SOURCE.summary}</p>
+            <ul className="bullets">
+              {DATA_SOURCE.bullets.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </aside>
+        </div>
+      )}
 
       {activeId && (
         <div className="overlay" onClick={() => setActiveId(null)}>
