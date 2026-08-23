@@ -68,11 +68,23 @@ if [ "$ready" != 1 ]; then
 fi
 
 echo "$(date '+%F %T') posting ingest" >>"$LOG"
-RESP="$(curl -sS -m 480 -w "\n%{http_code}" -X POST "http://127.0.0.1:${PORT}/api/ingest" || true)"
-HTTP_CODE="$(printf '%s' "$RESP" | tail -n 1)"
-BODY="$(printf '%s' "$RESP" | sed '$d')"
-printf '%s\n' "$BODY" | tee -a "$LOG"
-echo "http $HTTP_CODE" >>"$LOG"
+HTTP_CODE=""
+BODY=""
+for attempt in 1 2 3 4 5; do
+  RESP="$(curl -sS -m 480 -w "\n%{http_code}" -X POST "http://127.0.0.1:${PORT}/api/ingest" || true)"
+  HTTP_CODE="$(printf '%s' "$RESP" | tail -n 1)"
+  BODY="$(printf '%s' "$RESP" | sed '$d')"
+  printf '%s\n' "$BODY" | tee -a "$LOG"
+  echo "http $HTTP_CODE attempt $attempt" >>"$LOG"
+  if [ "$HTTP_CODE" = "200" ] && printf '%s' "$BODY" | grep -q '"stats"'; then
+    break
+  fi
+  if [ "$HTTP_CODE" = "409" ]; then
+    echo "$(date '+%F %T') ingest already running" >>"$LOG"
+    exit 1
+  fi
+  sleep $((attempt * 2))
+done
 if [ "$HTTP_CODE" != "200" ] || ! printf '%s' "$BODY" | grep -q '"stats"'; then
   echo "$(date '+%F %T') ingest failed" >>"$LOG"
   exit 1

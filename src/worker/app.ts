@@ -7,7 +7,6 @@ import { loadAppDetail } from "./detail";
 import type { RuntimeEnv } from "./env";
 import { isActivelyIngesting } from "./ingestStatus";
 import {
-  expireStaleIngest,
   isIngestLocked,
   latestIngest,
   latestSuccessfulIngest,
@@ -96,7 +95,6 @@ const app = new Hono<{ Bindings: RuntimeEnv }>();
 app.get("/api/health", (context) => context.json({ ok: true }));
 
 app.get("/api/meta", async (context) => {
-  await expireStaleIngest(context.env);
   const latest = await latestIngest(context.env);
   const lastOk = await latestSuccessfulIngest(context.env);
   const counts = await lensCounts(context.env);
@@ -114,7 +112,6 @@ app.get("/api/opportunities", async (context) => {
   if (!LENSES.some((item) => item.id === lens)) {
     return context.json({ error: "unknown lens" }, 400);
   }
-  await expireStaleIngest(context.env);
   const latest = await latestIngest(context.env);
   const lastOk = await latestSuccessfulIngest(context.env);
   const country = context.req.query("country") || "";

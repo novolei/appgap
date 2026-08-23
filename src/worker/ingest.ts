@@ -339,10 +339,26 @@ export async function rebuildOpportunities(env: Env, date: string, options: { re
   return opportunities.length;
 }
 
+async function d1Retry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i < 4; i += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      console.error(label, i + 1, error);
+      await new Promise((resolve) => setTimeout(resolve, 400 * (i + 1)));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 export async function latestIngest(env: Env) {
-  return env.DB.prepare(
-    "SELECT id, source, started_at, finished_at, status, stats, error FROM ingest_runs ORDER BY id DESC LIMIT 1",
-  ).first<IngestRunRow>();
+  return d1Retry("latestIngest", () =>
+    env.DB.prepare(
+      "SELECT id, source, started_at, finished_at, status, stats, error FROM ingest_runs ORDER BY id DESC LIMIT 1",
+    ).first<IngestRunRow>(),
+  );
 }
 
 export async function latestSuccessfulIngest(env: Env) {
@@ -355,15 +371,13 @@ export async function expireStaleIngest(env: Env): Promise<void> {
   const latest = await latestIngest(env);
   if (!latest || latest.status !== "running") return;
   if (!isStaleRunning(latest.started_at)) return;
-  await env.DB.prepare(
-    "UPDATE ingest_runs SET finished_at = ?, status = 'error', error = ? WHERE id = ? AND status = 'running'",
-  )
-    .bind(
-      new Date().toISOString(),
-      "ingest timed out，已改用上一份 D1 快照",
-      latest.id,
+  await d1Retry("expireStaleIngest", () =>
+    env.DB.prepare(
+      "UPDATE ingest_runs SET finished_at = ?, status = 'error', error = ? WHERE id = ? AND status = 'running'",
     )
-    .run();
+      .bind(new Date().toISOString(), "ingest timed out，已改用上一份 D1 快照", latest.id)
+      .run(),
+  );
 }
 
 export async function isIngestLocked(env: Env): Promise<boolean> {
