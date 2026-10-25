@@ -14,7 +14,7 @@ it("requests bounded non-thinking output and refuses to cache a truncated answer
   const env = { DEEPSEEK_API_KEY: "fixture-key" } as DataEnv & { DEEPSEEK_API_KEY: string };
   expect(await generateAnalysis(env, "fixture")).toBe("可核查分析");
   expect(JSON.parse(request.mock.calls[0][1].body)).toMatchObject({
-    model: "deepseek-flash", max_tokens: 3200, thinking: { type: "disabled" },
+    model: "deepseek-flash", max_tokens: 8000, thinking: { type: "disabled" },
   });
   await expect(generateAnalysis(env, "fixture")).rejects.toThrow("不完整");
 });

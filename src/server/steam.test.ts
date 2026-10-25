@@ -111,6 +111,13 @@ it("derives regional free signals from sales and rejects nonexistent local playe
     buildSteamView(fixture, new URLSearchParams({ country: "XX" })),
   ).toThrow("未知");
 });
+it("keeps subscription games in paid counts without mixing first charges into buyout price medians", () => {
+  const data = { ...fixture, games: { ...fixture.games, "3": { ...fixture.games["3"], subscription: true, priceUsd: 1 } } };
+  const view = buildSteamView(data, new URLSearchParams({ country: "ALL" }));
+  expect(view.summary.paid).toBe(2);
+  expect(view.summary.medianPrice).toBe(10);
+  expect(view.games.find((g) => g.appId === "3")?.subscription).toBe(true);
+});
 const directories: string[] = [];
 const databases: SqliteDatabase[] = [];
 afterEach(() => {

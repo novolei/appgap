@@ -146,7 +146,7 @@ export function buildSteamView(
     paid: group.filter((g) => !g.free).length,
     priceMedian: median(
       group
-        .filter((g) => !g.free && g.priceUsd !== null)
+        .filter((g) => !g.free && !g.subscription && g.priceUsd !== null)
         .map((g) => g.priceUsd!),
     ),
     rising: group.filter((g) => (g.opportunity.averageRankChange ?? 0) > 0)

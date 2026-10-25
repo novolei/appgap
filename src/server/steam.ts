@@ -170,6 +170,7 @@ export function steamRoutes(
           tags: g.tags,
           priceUsd: g.priceUsd,
           free: g.free,
+          subscription: Boolean(g.subscription),
           positions: g.positions
             .filter((p) => country === "ALL" || p.country === country)
             .map(({ country, chart, rank }) => ({ country, chart, rank })),

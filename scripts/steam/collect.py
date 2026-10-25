@@ -33,12 +33,13 @@ def normalize_game(item, tag_names):
         return None
     basic = item.get("basic_info", {})
     purchase = item.get("best_purchase_option", {})
-    if purchase.get("recurrence_info") or purchase.get("package_group") == "subscriptions":
+    subscription = bool(purchase.get("recurrence_info") or purchase.get("package_group") == "subscriptions")
+    if subscription and purchase.get("included_game_count") != 1:
         return None
     summary = item.get("reviews", {}).get("summary_filtered", {})
     assets = item.get("assets", {})
     image = assets.get("asset_url_format", "").replace("${FILENAME}", assets.get("small_capsule", ""))
-    return {"appId": app_id, "name": item.get("name", app_id), "type": item.get("type"), "free": bool(item.get("is_free")),
+    return {"appId": app_id, "name": item.get("name", app_id), "type": item.get("type"), "free": bool(item.get("is_free")), "subscription": subscription,
             "description": basic.get("short_description", "")[:1200], "tags": [tag_names.get(str(tag), "#"+str(tag)) for tag in item.get("tagids", [])],
             "developers": [row["name"] for row in basic.get("developers", [])], "publishers": [row["name"] for row in basic.get("publishers", [])],
             "priceUsd": float(purchase["final_price_in_cents"])/100 if "final_price_in_cents" in purchase else 0 if item.get("is_free") else None,

@@ -46,6 +46,7 @@ export type SteamGame = {
   appId: string;
   name: string;
   free: boolean;
+  subscription?: boolean;
   description: string;
   tags: string[];
   developers: string[];

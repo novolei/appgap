@@ -31,8 +31,11 @@ class SourceChecks(unittest.TestCase):
                     with collector_lock(Path(path)):
                         self.fail('second collector must not acquire lock')
 
-    def test_subscription_is_not_misclassified_as_a_paid_game(self):
+    def test_subscription_catalog_excluded_but_single_subscription_game_kept(self):
         self.assertIsNone(normalize_game({'appid': 1289670, 'success': 1, 'visible': True, 'type': 0, 'best_purchase_option': {'recurrence_info': {'renewal_price_in_cents':'599'}}}, {}))
+        game=normalize_game({'appid':266410,'success':1,'visible':True,'type':0,'best_purchase_option':{'included_game_count':1,'final_price_in_cents':'1159','recurrence_info':{'renewal_price_in_cents':'1599'}}},{})
+        self.assertTrue(game['subscription'])
+        self.assertEqual(game['priceUsd'],11.59)
 
     def test_resumption_reuses_raw_bytes_without_network_or_new_timestamp(self):
         with tempfile.TemporaryDirectory(prefix="appgap-steam-cache-") as path:

@@ -53,6 +53,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     location.reload();
     throw Error("请登录");
   }
+  if (!response.headers.get("content-type")?.includes("application/json"))
+    throw Error(`服务返回非 JSON 响应（HTTP ${response.status}），请稍后重试。`);
   const data = (await response.json()) as { error?: string };
   if (!response.ok) throw Error(data.error || "请求失败");
   return data as T;
@@ -185,6 +187,7 @@ export function SteamApp() {
         "appId",
         "name",
         "free",
+        "subscription",
         "US_reference_price_USD",
         "global_lifetime_reviews",
         "global_positive_pct",
@@ -197,6 +200,7 @@ export function SteamApp() {
         g.appId,
         g.name,
         g.free,
+        Boolean(g.subscription),
         g.priceUsd,
         g.reviewCount,
         g.positivePct,
@@ -358,7 +362,7 @@ export function SteamApp() {
               [
                 "付费中位价",
                 money(view.summary.medianPrice),
-                "美国区现价，仅作参考",
+                "美国区买断现价，不含订阅",
               ],
               [
                 "排名上移",
@@ -527,7 +531,7 @@ export function SteamApp() {
                           <small>{g.tags.slice(0, 3).join(" · ")}</small>
                         </th>
                         <td>
-                          {g.free ? "免费本体" : money(g.priceUsd)}
+                          {g.free ? "免费本体" : g.subscription ? `订阅 · 首期 ${money(g.priceUsd)}` : money(g.priceUsd)}
                           {g.discountPct > 0 && (
                             <small>现价折扣 −{g.discountPct}%</small>
                           )}
@@ -750,7 +754,7 @@ export function SteamApp() {
                   ·{" "}
                   {detail.game.free
                     ? "免费本体"
-                    : `美国区 ${money(detail.game.priceUsd)}`}{" "}
+                    : `美国区 ${detail.game.subscription ? "订阅首期 " : ""}${money(detail.game.priceUsd)}`}{" "}
                   · 发行 {date(detail.game.releaseTimestamp)}
                 </p>
                 <p>
