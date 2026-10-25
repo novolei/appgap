@@ -24,6 +24,7 @@ import {
 import { copyText } from "./copy";
 import { formatCount, formatRating, positionText, ratingTone, relativeTime } from "./format";
 import { readPools } from "./storage";
+import { Markdown } from "./Markdown";
 
 const LENS_OR_POOL = [
   "paid_tools",
@@ -57,47 +58,6 @@ function writeHash(lens: LensId | PoolId, appId: string | null, q: string, count
   if (q) params.set("q", q);
   if (country) params.set("country", country);
   window.location.hash = params.toString();
-}
-
-export function Markdown({ text }: { text: string }) {
-  const blocks = text.replace(/\r\n/g, "\n").trim().split(/\n{2,}/);
-  return (
-    <div className="md">
-      {blocks.map((block, index) => {
-        const lines = block.split("\n");
-        if (/^#{1,3} /.test(lines[0])) {
-          const title = lines[0].replace(/^#{1,3} /, "");
-          const rest = lines.slice(1).join("\n").trim();
-          return (
-            <div key={index}>
-              <h3>{title}</h3>
-              {rest ? <p>{rest}</p> : null}
-            </div>
-          );
-        }
-        const listish = lines.filter((line) => line.trim());
-        if (listish.length && listish.every((line) => /^[-*•]\s/.test(line) || /^\d+\.\s/.test(line))) {
-          return (
-            <ul key={index}>
-              {listish.map((line, lineIndex) => (
-                <li key={lineIndex}>{line.replace(/^[-*•]\s+/, "").replace(/^\d+\.\s+/, "")}</li>
-              ))}
-            </ul>
-          );
-        }
-        return (
-          <p key={index}>
-            {lines.map((line, lineIndex) => (
-              <span key={lineIndex}>
-                {lineIndex > 0 ? <br /> : null}
-                {line}
-              </span>
-            ))}
-          </p>
-        );
-      })}
-    </div>
-  );
 }
 
 type PoolState = { watch: string[]; build: string[] };

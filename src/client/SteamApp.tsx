@@ -5,7 +5,7 @@ import type {
   SteamSnapshot,
   SteamView,
 } from "../shared/steam";
-import { Markdown } from "./App";
+import { Markdown } from "./Markdown";
 import { savePool } from "./api";
 import { csvCell } from "../shared/steam-export";
 import "./steam.css";
