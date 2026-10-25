@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from analysis import analyze, review_evidence
 from sources import API, STORE, Sources, free_ids, parse_chart
+from locking import collector_lock
 
 
 def atomic_json(path, value):
@@ -32,6 +33,8 @@ def normalize_game(item, tag_names):
         return None
     basic = item.get("basic_info", {})
     purchase = item.get("best_purchase_option", {})
+    if purchase.get("recurrence_info") or purchase.get("package_group") == "subscriptions":
+        return None
     summary = item.get("reviews", {}).get("summary_filtered", {})
     assets = item.get("assets", {})
     image = assets.get("asset_url_format", "").replace("${FILENAME}", assets.get("small_capsule", ""))
@@ -40,7 +43,7 @@ def normalize_game(item, tag_names):
             "developers": [row["name"] for row in basic.get("developers", [])], "publishers": [row["name"] for row in basic.get("publishers", [])],
             "priceUsd": float(purchase["final_price_in_cents"])/100 if "final_price_in_cents" in purchase else 0 if item.get("is_free") else None,
             "priceOriginalUsd": float(purchase["original_price_in_cents"])/100 if "original_price_in_cents" in purchase else None,
-            "discountPct": purchase.get("discount_pct", 0), "reviewCount": summary.get("review_count", 0), "positivePct": summary.get("percent_positive"),
+            "discountPct": purchase.get("discount_pct", 0), "reviewCount": summary.get("review_count", 0), "positivePct": summary.get("percent_positive") if summary.get("review_count",0)>0 else None,
             "reviewLabel": summary.get("review_score_label"), "releaseTimestamp": item.get("release", {}).get("steam_release_date"),
             "platforms": item.get("platforms", {}), "url": f"{STORE}/app/{app_id}/", "image": "https://shared.fastly.steamstatic.com/store_item_assets/"+image if image else None}
 
@@ -57,12 +60,16 @@ def collect(directory, resume_run=None):
     now = datetime.now(timezone.utc)
     cache_dir = None
     if resume_run is not None:
-        previous = database.execute("SELECT started_at,status FROM runs WHERE id=?", (resume_run,)).fetchone()
-        if not previous or previous[1] == 'success':
+        previous = database.execute("SELECT started_at,status,payload FROM runs WHERE id=?", (resume_run,)).fetchone()
+        if not previous:
             raise ValueError("resume requires an interrupted or failed run")
+        if previous[1] == 'success':
+            coverage = json.loads(previous[2] or '{}').get('reviewCoverage',{})
+            if coverage.get('succeeded',0) >= coverage.get('targeted',0):
+                raise ValueError("completed snapshot does not need resuming")
         now = datetime.fromisoformat(previous[0])
         cache_dir = directory/'raw'/str(resume_run)
-        database.execute("UPDATE runs SET status='error',error='interrupted; resumed from cached source responses' WHERE id=?", (resume_run,))
+        database.execute("UPDATE runs SET status='error',error='interrupted; resumed from cached source responses' WHERE id=? AND status='running'", (resume_run,))
     database.execute("UPDATE runs SET status='error',error='expired after two hours' WHERE status='running' AND started_at < ?", ((now-timedelta(hours=2)).isoformat(),))
     try:
         run_id = database.execute("INSERT INTO runs(started_at,status) VALUES (?,'running')", (now.isoformat(),)).lastrowid
@@ -172,11 +179,17 @@ def collect(directory, resume_run=None):
                 if index % 25 == 0:
                     progress("bounded 30-day review samples", reviewed=index, reviewTargets=len(targets), reviewSuccess=review_ok)
         snapshot = analyze({"schemaVersion": 1, "runId": run_id, "capturedAt": datetime.now(timezone.utc).isoformat(), "startedAt": now.isoformat(), "date": now.astimezone(timezone(timedelta(hours=8))).date().isoformat(), "reviewWindow": {"start": review_start, "end": review_end, "days": 30}, "countries": regions, "games": games, "ranks": ranks, "coverage": coverage, "sources": sorted(source.receipts, key=lambda row: row["label"]), "reviewCoverage": {"targeted": len(targets), "succeeded": review_ok}})
+        previous_file = directory/'latest.json'
+        if targets and review_ok/len(targets) < .9 and previous_file.exists():
+            previous_coverage = json.loads(previous_file.read_bytes()).get('reviewCoverage',{})
+            if previous_coverage.get('targeted',0) and previous_coverage.get('succeeded',0)/previous_coverage['targeted'] >= .9:
+                raise ValueError('review source incomplete; preserving the previous well-covered snapshot')
         payload = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
         if len(payload.encode()) > 25*1024*1024:
             raise ValueError("snapshot exceeds bounded web cache budget")
         with database:
             database.execute("UPDATE runs SET status='success',finished_at=?,payload=? WHERE id=?", (snapshot["capturedAt"], payload, run_id))
+            database.execute("DELETE FROM rank_history WHERE date=?", (snapshot["date"],))
             database.executemany("INSERT OR REPLACE INTO rank_history VALUES (?,?,?,?,?)", [(snapshot["date"], row["country"], row["chart"], row["appId"], row["rank"]) for row in ranks])
             database.executemany("INSERT OR REPLACE INTO catalog VALUES (?,?,?)", [(app_id, json.dumps({k:v for k,v in game.items() if k not in ('reviews','opportunity')}), snapshot["capturedAt"]) for app_id, game in games.items()])
             database.execute("DELETE FROM rank_history WHERE date < date(?, '-400 days')", (snapshot["date"],))
@@ -201,8 +214,5 @@ if __name__ == "__main__":
     parser.add_argument("--directory", type=pathlib.Path, default=pathlib.Path("/var/lib/appgap/steam"))
     parser.add_argument("--resume-run", type=int)
     args = parser.parse_args()
-    import fcntl
-    args.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with (args.directory/'collector.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with collector_lock(args.directory):
         collect(args.directory, args.resume_run)

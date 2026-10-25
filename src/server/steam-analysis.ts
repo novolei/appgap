@@ -168,9 +168,20 @@ export function buildSteamView(
     }))
     .sort((a, b) => b.n - a.n);
   const matrixTags = genreStats.slice(0, 12).map((g) => g.tag);
-  const global = regionGames("GLOBAL");
+  const matrixGames = (id: string) =>
+    chart === "free"
+      ? all.filter(
+          (game) =>
+            game.free &&
+            modelMatch(game) &&
+            (positions.get(game.appId) || []).some(
+              (row) => row.country === id && row.chart === "sales",
+            ),
+        )
+      : regionGames(id);
+  const global = matrixGames("GLOBAL");
   const matrix = snapshot.countries.map((region) => {
-    const cohort = regionGames(region.id);
+    const cohort = matrixGames(region.id);
     return {
       country: region.id,
       n: cohort.length,
@@ -184,7 +195,7 @@ export function buildSteamView(
           n,
           denominator: cohort.length,
           index:
-            cohort.length && global.length && base
+            cohort.length >= 30 && global.length >= 30 && base >= 5
               ? Math.round((n / cohort.length / (base / global.length)) * 100)
               : null,
         };
@@ -194,7 +205,7 @@ export function buildSteamView(
   const windows: SteamWindow[] = windowDefinitions
     .map((definition) => {
       const group = games.filter((game) =>
-        definition.tags.some((tag) => game.tags.includes(tag)),
+        definition.tags.some((tag) => game.tags.slice(0, 6).includes(tag)),
       );
       const topics = new Map<
         string,
@@ -241,6 +252,14 @@ export function buildSteamView(
     );
   const selectedStats = stats(games);
   return {
+    comparisonDates: [
+      ...new Set(
+        snapshot.ranks
+          .filter((r) => r.chart === "sales" && r.weekStart)
+          .map((r) => new Date(r.weekStart! * 1000).toISOString().slice(0, 10)),
+      ),
+    ].sort(),
+    momentumUsable: games.some((g) => g.opportunity.momentum !== null),
     capturedAt: snapshot.capturedAt,
     runId: snapshot.runId,
     country,
@@ -270,6 +289,7 @@ export function buildSteamView(
       recentReleases: games.filter(
         (g) =>
           g.releaseTimestamp &&
+          g.releaseTimestamp <= snapshot.reviewWindow.end &&
           g.releaseTimestamp >= snapshot.reviewWindow.end - 90 * 86400,
       ).length,
       medianPrice: selectedStats.priceMedian,

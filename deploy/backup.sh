@@ -6,3 +6,4 @@ gzip "$APPGAP_BACKUP"
 python3 deploy/backup-steam.py "$APPGAP_BACKUP"
 find /var/backups/appgap -maxdepth 1 -type f -name 'appgap-*.sqlite' -mtime +30 -delete
 find /var/backups/appgap -maxdepth 1 -type f -name 'appgap-*.gz' -mtime +30 -delete
+find /var/backups/appgap -maxdepth 1 -type f -name 'appgap-*.steam.*.gz' -mtime +7 -delete

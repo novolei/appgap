@@ -4,6 +4,7 @@ import pathlib
 import shutil
 import sqlite3
 import sys
+from contextlib import closing
 
 root = pathlib.Path('/var/lib/appgap/steam')
 destination = pathlib.Path(sys.argv[1])
@@ -11,7 +12,7 @@ source_path = root/'history.sqlite'
 if source_path.exists():
     temporary = destination.with_suffix('.steam.sqlite')
     try:
-        with sqlite3.connect(source_path) as source, sqlite3.connect(temporary) as target:
+        with closing(sqlite3.connect(source_path)) as source, closing(sqlite3.connect(temporary)) as target:
             source.backup(target)
             if target.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise RuntimeError('Steam backup integrity check failed')

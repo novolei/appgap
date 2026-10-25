@@ -5,8 +5,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from analysis import review_evidence, score_game
-from collect import collect
+from collect import collect, normalize_game
 from sources import parse_chart, Sources
+from locking import collector_lock
 
 
 def chart_html(country="GLOBAL", duplicate=False):
@@ -23,6 +24,16 @@ def chart_html(country="GLOBAL", duplicate=False):
 
 
 class SourceChecks(unittest.TestCase):
+    def test_exclusive_cross_platform_collector_lock(self):
+        with tempfile.TemporaryDirectory(prefix='appgap-steam-lock-') as path:
+            with collector_lock(Path(path)):
+                with self.assertRaises(OSError):
+                    with collector_lock(Path(path)):
+                        self.fail('second collector must not acquire lock')
+
+    def test_subscription_is_not_misclassified_as_a_paid_game(self):
+        self.assertIsNone(normalize_game({'appid': 1289670, 'success': 1, 'visible': True, 'type': 0, 'best_purchase_option': {'recurrence_info': {'renewal_price_in_cents':'599'}}}, {}))
+
     def test_resumption_reuses_raw_bytes_without_network_or_new_timestamp(self):
         with tempfile.TemporaryDirectory(prefix="appgap-steam-cache-") as path:
             root = Path(path)
@@ -53,6 +64,8 @@ class SourceChecks(unittest.TestCase):
         self.assertEqual(evidence["negativeMatching30Days"], 1000)
         self.assertEqual({p["id"] for p in evidence["topics"]}, {"performance", "save", "controls"})
         self.assertEqual(review_evidence("5", {}, {})["negativeWilson95"], None)
+        self.assertEqual(review_evidence('5',{'total_matching':1000},{'total_matching':200})['negativeRate30Days'],20)
+        self.assertIsNone(review_evidence('5',{'total_matching':5},{'total_matching':10})['negativeRate30Days'])
 
     def test_scope_risk_and_missing_evidence_reduce_priority(self):
         positions = [{"chart": "sales", "country": "US", "rank": 5, "previousRank": 20}]
@@ -61,6 +74,9 @@ class SourceChecks(unittest.TestCase):
         self.assertGreater(focused["feasibility"], mmo["feasibility"])
         self.assertLessEqual(focused["score"], 60)
         self.assertEqual(focused["confidence"], "初步线索")
+        stale = score_game({'tags':['Puzzle']},[{**positions[0],'weekStart':1}],29,30*86400)
+        self.assertIsNone(stale['momentum'])
+        self.assertEqual(stale['averageRankChange'],15)
 
 
 class FakeSources:

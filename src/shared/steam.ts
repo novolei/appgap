@@ -12,6 +12,7 @@ export type SteamRank = {
   peakPlayers?: number;
 };
 export type SteamReview = {
+  negativeRate30Days?: number | null;
   allSampleN: number;
   negativeInAllSample: number;
   negativeWilson95: [number, number] | null;
@@ -73,6 +74,7 @@ export type SteamGame = {
   };
 };
 export type SteamSnapshot = {
+  analysisVersion?: string;
   schemaVersion: number;
   runId: number;
   capturedAt: string;
@@ -119,6 +121,8 @@ export type SteamWindow = {
   pains: { label: string; hits: number; denominator: number }[];
 };
 export type SteamView = {
+  comparisonDates: string[];
+  momentumUsable: boolean;
   capturedAt: string;
   runId: number;
   country: string;

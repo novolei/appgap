@@ -7,6 +7,15 @@ import { buildSteamView } from "./steam-analysis";
 import { steamRoutes } from "./steam";
 import { SqliteDatabase } from "./database";
 import { loginResponse } from "../worker/auth";
+import { csvCell } from "../shared/steam-export";
+
+it("exports untrusted game titles without spreadsheet formulas", () => {
+  expect(csvCell('=HYPERLINK("https://evil.test")')).toBe(
+    '"\'=HYPERLINK(""https://evil.test"")"',
+  );
+  expect(csvCell('a,"b')).toBe('"a,""b"');
+  expect(csvCell(10)).toBe('"10"');
+});
 
 const game = (appId: string, tags: string[], free = false): SteamGame => ({
   appId,
@@ -80,7 +89,7 @@ it("deduplicates union games and keeps region matrix denominators outside tag se
     view.matrix
       .find((r) => r.country === "US")!
       .cells.find((c) => c.tag === "Puzzle"),
-  ).toEqual({ tag: "Puzzle", n: 2, denominator: 3, index: 133 });
+  ).toEqual({ tag: "Puzzle", n: 2, denominator: 3, index: null });
   expect(view.summary.rising).toBe(0);
   expect(view.summary.compared).toBe(0);
   expect(view.summary.medianPrice).toBe(10);

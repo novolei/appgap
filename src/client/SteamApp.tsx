@@ -7,6 +7,7 @@ import type {
 } from "../shared/steam";
 import { Markdown } from "./App";
 import { savePool } from "./api";
+import { csvCell } from "../shared/steam-export";
 import "./steam.css";
 
 const format = (n: number | null | undefined) =>
@@ -14,7 +15,7 @@ const format = (n: number | null | undefined) =>
     ? "—"
     : new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(n);
 const money = (n: number | null | undefined) =>
-  n === null || n === undefined ? "未知" : `$${format(n)}`;
+  n === null || n === undefined ? "未知" : new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(n);
 const date = (stamp: number | null | undefined) =>
   stamp ? new Date(stamp * 1000).toLocaleDateString("zh-CN") : "无基线";
 const regionNames: Record<string, string> = {
@@ -88,6 +89,9 @@ export function SteamApp() {
   const params = new URLSearchParams({ country, tag, model, chart }).toString();
   const activeScope = useRef(params);
   activeScope.current = params;
+  useEffect(() => {
+    document.title = "AppGap · Steam 游戏机会研究";
+  }, []);
   useEffect(() => {
     const abort = new AbortController();
     setLoading(true);
@@ -203,16 +207,7 @@ export function SteamApp() {
       ]),
     ];
     const blob = new Blob(
-      [
-        "\ufeff" +
-          rows
-            .map((row) =>
-              row
-                .map((v) => '"' + String(v ?? "").replaceAll('"', '""') + '"')
-                .join(","),
-            )
-            .join("\r\n"),
-      ],
+      ["\ufeff" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n")],
       { type: "text/csv;charset=utf-8" },
     );
     const url = URL.createObjectURL(blob);
@@ -252,7 +247,7 @@ export function SteamApp() {
                 })
               : "读取快照中"}
           </strong>
-          <span>香港时间 · 每日 09:00 采集</span>
+          <span>香港时间 · 每日 09:13 采集，完成后同步</span>
           <span>
             {view
               ? `${view.totalGames} 款入样游戏 · ${view.countries.length - 1} 个地区`
@@ -260,6 +255,7 @@ export function SteamApp() {
           </span>
         </div>
       </header>
+      <p className="steam-footnote"><a href="/research/steam-opportunities-2026-10-25.html" target="_blank" rel="noreferrer">2026-10-25 综合研究与原型建议 ↗</a> · <a href="/research/steam-analysis-2026-10-25.html" target="_blank" rel="noreferrer">复算笔记预览</a> · <a href="/research/steam-analysis-2026-10-25.ipynb" download>下载 Notebook</a></p>
       <div className="steam-caution">
         研究范围是公开榜单入样游戏，覆盖头部需求；无法代表 Steam
         全量市场。畅销含内购，免费榜不等于下载榜；地区指榜单，评论样本来自全球。
@@ -297,7 +293,7 @@ export function SteamApp() {
               value="players"
               disabled={!["GLOBAL", "ALL"].includes(country)}
             >
-              全球在线热度 Top 100
+              全球最常玩 Top 100
             </option>
           </select>
         </label>
@@ -343,6 +339,14 @@ export function SteamApp() {
               。以下仍为上次成功快照。
             </p>
           )}
+          <p className="steam-footnote">
+            可用周榜基线：{view.comparisonDates.join("、") || "暂无"}。
+            {!view.momentumUsable
+              ? "基线缺失或超过 14 天，动量未参与优先级评分；目前不能确认哪类玩法正在持续增长。"
+              : "仅表示与该周榜相比的名次差，不能等同于销量增速。"}
+            评论接口成功 {view.reviewCoverage.succeeded}/
+            {view.reviewCoverage.targeted} 款。
+          </p>
           <section className="steam-stats" aria-label="样本概览">
             {[
               ["当前入样", view.summary.n, "不同游戏"],
@@ -538,7 +542,7 @@ export function SteamApp() {
                             ? "无可比项"
                             : `${g.opportunity.averageRankChange > 0 ? "+" : ""}${format(g.opportunity.averageRankChange)}`}
                           <small>
-                            {g.opportunity.changeComparisons} 个地区可比
+                            {g.opportunity.changeComparisons} 个榜单可比
                           </small>
                         </td>
                         <td>
@@ -564,6 +568,9 @@ export function SteamApp() {
                 当前商业模式下该地区入样数”。括号为相对全球指数，100 =
                 全球同榜占比；不是销售份额。游戏取前 6
                 个标签，可重复计数。标签筛选决定显示列，矩阵分母保留各地完整入样。
+                指数仅在地区与全球均至少 30 款、全球该标签至少 5
+                款时计算。免费模式的矩阵统一从各区收入畅销 Top100
+                中筛选免费游戏，额外全球免费榜只用于游戏列表。
               </p>
               <div className="steam-table-wrap">
                 <table>
@@ -679,12 +686,12 @@ export function SteamApp() {
                     {view.coverage.map((c, i) => (
                       <tr key={i}>
                         <td>
-                          {c.source ? (
+                          {c.source?.startsWith("https://") ? (
                             <a href={c.source} target="_blank" rel="noreferrer">
                               {c.country || "商店元数据"} · {c.chart || "sales"}
                             </a>
                           ) : (
-                            c.country
+                            c.source || c.country
                           )}
                         </td>
                         <td>{c.status === "ok" ? "成功" : c.error}</td>
@@ -768,7 +775,7 @@ export function SteamApp() {
                         <th>现排名</th>
                         <th>周榜基线</th>
                         <th>基线开始日</th>
-                        <th>地区现价</th>
+                            <th>源页面显示价格</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -816,6 +823,8 @@ export function SteamApp() {
                       API 返回的时间窗匹配评论：全部{" "}
                       {format(detail.game.reviews.matching30Days)}、负评{" "}
                       {format(detail.game.reviews.negativeMatching30Days)}
+                      。这些匹配评论中的负评占比{" "}
+                      {format(detail.game.reviews.negativeRate30Days)}%
                       。实际样本时间 {date(detail.game.reviews.firstTimestamp)}{" "}
                       — {date(detail.game.reviews.lastTimestamp)}。
                     </p>

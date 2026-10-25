@@ -31,6 +31,12 @@ for _ in $(seq 1 20); do
 done
 [ "$healthy" = 1 ] || rollback
 if [ -n "$old" ]; then ln -sfn "$old" /opt/appgap/previous; fi
-systemctl enable appgap appgap-ingest.timer appgap-steam.timer appgap-backup.timer
-systemctl start appgap-ingest.timer appgap-steam.timer appgap-backup.timer
+systemctl enable appgap appgap-ingest.timer appgap-backup.timer
+systemctl start appgap-ingest.timer appgap-backup.timer
+if [ -f /etc/appgap-data.key ]; then
+  systemctl disable --now appgap-steam.timer
+  systemctl enable --now appgap-steam-sync.timer
+else
+  systemctl enable --now appgap-steam.timer
+fi
 echo "APPGAP_DEPLOY_OK $version"

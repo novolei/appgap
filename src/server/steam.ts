@@ -58,7 +58,15 @@ export function steamRoutes(
     } catch (error) {
       return c.json(
         {
-          error: error instanceof Error ? error.message : "尚无已发布快照",
+          error:
+            error &&
+            typeof error === "object" &&
+            "code" in error &&
+            error.code === "ENOENT"
+              ? "首次 Steam 快照尚未采集完成"
+              : error instanceof Error
+                ? error.message
+                : "尚无已发布快照",
           status: status(),
         },
         503,
@@ -124,7 +132,7 @@ export function steamRoutes(
       tag = (query.get("tag") || "").slice(0, 100),
       model = query.get("model") || "all",
       chart = query.get("chart") || "sales";
-    const key = `steam:${data.runId}:${JSON.stringify([country, tag, model, chart])}`;
+    const key = `steam:${data.runId}:${data.analysisVersion || "base"}:${env.DEEPSEEK_MODEL || "deepseek-flash"}:${JSON.stringify([country, tag, model, chart])}`;
     const previous = await env.DB.prepare(
       "SELECT markdown, created_at AS createdAt FROM ai_analyses WHERE app_id=?",
     )
@@ -148,18 +156,16 @@ export function steamRoutes(
         summary: view.summary,
         windows: view.windows,
         genreStats: view.genreStats.slice(0, 15),
-        games: view.games
-          .slice(0, 15)
-          .map((g) => ({
-            name: g.name,
-            tags: g.tags,
-            priceUsd: g.priceUsd,
-            free: g.free,
-            positions: g.positions.filter((p) => p.country === country),
-            opportunity: g.opportunity,
-            topics: g.topics,
-            sampleN: g.sampleN,
-          })),
+        games: view.games.slice(0, 15).map((g) => ({
+          name: g.name,
+          tags: g.tags,
+          priceUsd: g.priceUsd,
+          free: g.free,
+          positions: g.positions.filter((p) => p.country === country),
+          opportunity: g.opportunity,
+          topics: g.topics,
+          sampleN: g.sampleN,
+        })),
       };
       const markdown = await generateAnalysis(
         env,

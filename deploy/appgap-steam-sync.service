@@ -1,0 +1,22 @@
+[Unit]
+Description=Pull validated private GitHub Steam data into AppGap
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=appgap
+Group=appgap
+WorkingDirectory=/opt/appgap/current
+LoadCredential=github-deploy-key:/etc/appgap-data.key
+ExecStart=/usr/bin/python3 deploy/sync-steam.py --credentials %d
+TimeoutStartSec=4min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/appgap/steam
+MemoryMax=512M
+CPUQuota=100%
+Nice=15
+

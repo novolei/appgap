@@ -2,6 +2,7 @@
 import math
 import re
 from collections import Counter, defaultdict
+ANALYSIS_VERSION = '2026-10-25.3'
 
 PAINS = [
     ("performance", "性能与稳定性", r"crash|stutter|fps|optim[iz]|lag\b|卡顿|闪退|优化|帧|クラッシュ|重い|вылет|оптимиза|тормоз"),
@@ -38,7 +39,7 @@ def excerpt(text):
 
 
 def review_evidence(app_id, all_page, negative_page):
-    all_reviews = all_page.get("reviews", [])
+    all_reviews = list({str(row['recommendationid']): row for row in all_page.get("reviews", [])}.values())
     negatives = {str(row["recommendationid"]): row for row in all_reviews + negative_page.get("reviews", []) if not row.get("voted_up")}
     evidence = []
     counts = Counter()
@@ -60,7 +61,11 @@ def review_evidence(app_id, all_page, negative_page):
         center = (p + z*z/(2*n))/(1+z*z/n)
         spread = z*math.sqrt(p*(1-p)/n+z*z/(4*n*n))/(1+z*z/n)
         interval = [round(max(0, center-spread)*100, 1), round(min(1, center+spread)*100, 1)]
+    total = all_page.get('total_matching')
+    negative_total = negative_page.get('total_matching')
+    negative_rate = round(negative_total/total*100,1) if isinstance(total,int) and total>0 and isinstance(negative_total,int) and 0<=negative_total<=total else None
     return {"allSampleN": n, "negativeInAllSample": negative_n, "negativeWilson95": interval,
+            "negativeRate30Days": negative_rate,
             "matching30Days": all_page.get("total_matching"), "negativeMatching30Days": negative_page.get("total_matching"),
             "negativeSampleN": len(evidence), "languages": dict(Counter(row.get("language", "unknown") for row in all_reviews)),
             "purchase": {"steam": sum(bool(row.get("steam_purchase")) for row in all_reviews), "external": sum(not row.get("steam_purchase") for row in all_reviews), "receivedFree": sum(bool(row.get("received_for_free")) for row in all_reviews), "refunded": sum(bool(row.get("refunded")) for row in all_reviews)},
@@ -70,19 +75,22 @@ def review_evidence(app_id, all_page, negative_page):
             "evidence": sorted(evidence, key=lambda row: len(row["topics"]), reverse=True)}
 
 
-def score_game(game, positions, region_count):
+def score_game(game, positions, region_count, observed_at=None):
     sales = [row for row in positions if row["chart"] == "sales"]
     regions = {row["country"] for row in sales if row["country"] != "GLOBAL"}
     best = min((row["rank"] for row in sales), default=None)
     deltas = [row["previousRank"]-row["rank"] for row in sales if row.get("previousRank") is not None]
-    momentum = max(0, min(100, 50+sum(deltas)/len(deltas)*1.5)) if deltas else None
+    fresh_deltas = [row["previousRank"]-row["rank"] for row in sales if row.get("previousRank") is not None and (observed_at is None or row.get("weekStart") is not None and 0 <= observed_at-row["weekStart"] <= 14*86400)]
+    momentum = max(0, min(100, 50+sum(fresh_deltas)/len(fresh_deltas)*1.5)) if fresh_deltas else None
     reviews = game.get("reviews", {})
     negative_n = reviews.get("negativeSampleN", 0)
     theme_max = max((row["hits"] for row in reviews.get("topics", [])), default=0)
     repeatable_pain = min(100, theme_max/max(negative_n, 1)*100) if negative_n >= 5 else 0
+    rate = reviews.get('negativeRate30Days')
+    repeatable_pain *= min(1, rate/35) if rate is not None else .5
     tags = set(game.get("tags", []))
     feasibility = 25 if tags & HIGH_SCOPE else 65 if "Online Co-Op" in tags or "Co-op" in tags else 75
-    if tags & FOCUSED and not tags & HIGH_SCOPE:
+    if set(game.get("tags", [])[:6]) & FOCUSED and not tags & HIGH_SCOPE:
         feasibility = min(90, feasibility+10)
     demand = min(100, len(regions)/max(1, region_count)*45 + (25 if best is not None and best <= 20 else 10 if best else 0) + min(30, math.log10(1+game.get("reviewCount", 0))*5))
     score = demand*.3 + repeatable_pain*.25 + (momentum or 0)*.2 + feasibility*.25
@@ -96,9 +104,10 @@ def score_game(game, positions, region_count):
 
 
 def analyze(snapshot):
+    snapshot['analysisVersion'] = ANALYSIS_VERSION
     positions = defaultdict(list)
     for row in snapshot["ranks"]:
         positions[row["appId"]].append(row)
     for app_id, game in snapshot["games"].items():
-        game["opportunity"] = score_game(game, positions[app_id], len(snapshot["countries"])-1)
+        game["opportunity"] = score_game(game, positions[app_id], len(snapshot["countries"])-1, snapshot["reviewWindow"]["end"])
     return snapshot
