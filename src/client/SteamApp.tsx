@@ -7,6 +7,7 @@ import type {
   SteamView,
 } from "../shared/steam";
 import { Markdown } from "./Markdown";
+import { TagPicker } from "./TagPicker";
 import { savePool } from "./api";
 import { csvCell } from "../shared/steam-export";
 import "./steam.css";
@@ -327,13 +328,10 @@ export function SteamApp() {
         <div className="steam-tag-field">
           <label htmlFor="steam-tag-input">游戏标签</label>
           <form className="steam-tag-entry" onSubmit={(e) => { e.preventDefault(); setTag(tagDraft.trim()); }}>
-            <input id="steam-tag-input" list="steam-tag-options" value={tagDraft} maxLength={100}
-              placeholder="全部类型；输入标签或关键词" autoComplete="off"
-              onChange={(e) => setTagDraft(e.target.value)} />
+            <TagPicker value={tagDraft} tags={view?.tags || []} onChange={setTagDraft}/>
             <button type="submit">应用</button>
           </form>
-          <datalist id="steam-tag-options">{view?.tags.map((t) => <option key={t} value={t} />)}</datalist>
-          <small>可自定义文字匹配；用 + 组合，留空显示全部。</small>
+          <small id="steam-tag-help">用 + 组合标签；留空查看全部。</small>
         </div>
         <label>
           商业模式
@@ -368,14 +366,10 @@ export function SteamApp() {
               。以下仍为上次成功快照。
             </p>
           )}
-          <p className="steam-footnote">
-            可用周榜基线：{view.comparisonDates.join("、") || "暂无"}。
-            {!view.momentumUsable
-              ? "基线缺失或超过 14 天，动量未参与优先级评分；目前不能确认哪类玩法正在持续增长。"
-              : "仅表示与该周榜相比的名次差，不能等同于销量增速。"}
-            评论接口成功 {view.reviewCoverage.succeeded}/
-            {view.reviewCoverage.targeted} 款。
-          </p>
+          <div className="steam-data-note" aria-label="数据口径">
+            <div><span>周榜基线 <strong>{view.comparisonDates.join("、") || "暂无"}</strong></span><span className={view.momentumUsable ? "steam-data-badge" : "steam-data-badge stale"}>{view.momentumUsable ? "可作名次对比" : "动量未参与评分"}</span><span className="steam-review-coverage">评论覆盖 <strong>{view.reviewCoverage.succeeded}/{view.reviewCoverage.targeted}</strong> 款</span></div>
+            <p>{!view.momentumUsable ? "基线缺失或超过 14 天，目前无法判断哪些玩法正在持续增长。" : "名次变化仅表示与基线的差异，不等同于销量增速。"}</p>
+          </div>
           <section className="steam-stats" aria-label="样本概览">
             {[
               ["当前入样", view.summary.n, "不同游戏"],
@@ -392,7 +386,7 @@ export function SteamApp() {
               [
                 "排名上移",
                 `${view.summary.rising} / ${view.summary.compared}`,
-                "与标注周榜基线可比",
+                "与所示历史基线相比",
               ],
               [
                 "近 30 天评论",

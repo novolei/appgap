@@ -19,14 +19,14 @@ export function SiteShell({children}:{children:ReactNode}) {
     </header>
     {!path.match(/^\/(login|register)/) && <SupportTicker />}
     <main id="main-content">{children}</main>
-    <footer className="site-footer"><span>AppGap · 为下一次值得做的尝试</span><span><a href="/support">支持研究站</a> · <a href="/account">用户中心</a></span><small>榜单提供研究线索，机会仍需真实用户与原型验证。</small></footer>
+    <footer className="site-footer"><span>AppGap · App Store 与 Steam 数据研究</span><span><a href="/support">支持 AppGap</a> · <a href="/account">用户中心</a></span><small>榜单提供研究线索，机会仍需真实用户与原型验证。</small></footer>
   </div></AccountContext.Provider>;
 }
 function SupportTicker(){
   const [feed,setFeed]=useState<DonationFeed|null>(null),[paused,setPaused]=useState(false),[hovered,setHovered]=useState(false);
   useEffect(()=>{let live=true;const load=()=>{if(!document.hidden)void communityApi<DonationFeed>("/api/donations/public").then(v=>{if(live)setFeed(v);}).catch(()=>{});};load();const timer=setInterval(load,30000);return()=>{live=false;clearInterval(timer);};},[]);
   const entries=feed?.recent || [];
-  const content=entries.length ? entries.map(item=><span className="ticker-item" key={item.id}><strong>{item.name}</strong> 支持了 <b>{money(item.amountMinor)}</b>{item.message && <span>“{item.message}”</span>}</span>) : <span className="ticker-item">让好问题被看见，让研究持续发生。<strong>成为第一位支持者 ↗</strong></span>;
+  const content=entries.length ? entries.map(item=><span className="ticker-item" key={item.id}><strong>{item.name}</strong> 支持了 <b>{money(item.amountMinor)}</b>{item.message && <span>“{item.message}”</span>}</span>) : <span className="ticker-item">DeepSeek 分析会产生 Token 费用，欢迎自愿支持。</span>;
   return <aside className="support-strip" aria-label="支持者动态"><span className="live-label"><i/>支持动态</span>
     <a href="/support" className={`ticker-link ${paused||hovered?"paused":""}`} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onFocus={()=>setHovered(true)} onBlur={()=>setHovered(false)} aria-label="查看支持者动态与捐赠入口">
       <span className={`ticker-track ${entries.length?"moving":""}`}><span className="ticker-group">{content}</span>{entries.length>0&&<span className="ticker-group" aria-hidden="true">{content}</span>}</span>
