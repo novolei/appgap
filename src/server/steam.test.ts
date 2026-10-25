@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -114,12 +114,39 @@ it("derives regional free signals from sales and rejects nonexistent local playe
 const directories: string[] = [];
 const databases: SqliteDatabase[] = [];
 afterEach(() => {
+  vi.unstubAllGlobals();
   databases.splice(0).forEach((db) => db.close());
   directories.splice(0).forEach((path) => {
     if (!path.startsWith(join(tmpdir(), "appgap-steam-route-")))
       throw Error("unsafe temporary path");
     rmSync(path, { recursive: true });
   });
+});
+it("gives AI regional evidence for ALL and refreshes its cache after a new snapshot", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "appgap-steam-route-"));
+  directories.push(directory);
+  writeFileSync(join(directory, "latest.json"), JSON.stringify(fixture));
+  const db = new SqliteDatabase(":memory:");
+  databases.push(db);
+  const env = { DB: db, SITE_PASSWORD: "test-site-password", DEEPSEEK_API_KEY: "fixture-key" };
+  const app = steamRoutes(env, directory, "https://appgap.test");
+  const cookie = (await loginResponse(env.SITE_PASSWORD, env, new Request("https://appgap.test"))).headers.get("set-cookie")!.split(";")[0];
+  const upstream = vi.fn().mockImplementation(async () => Response.json({ choices: [{ finish_reason: "stop", message: { content: "## 事实\n受限的样本证据。" } }] }));
+  vi.stubGlobal("fetch", upstream);
+  const analyze = () => app.request("https://appgap.test/analyze?country=ALL", { method: "POST", headers: { cookie } });
+  const first = await analyze();
+  expect(first.status).toBe(200);
+  expect(await first.json()).toMatchObject({ cached: false });
+  const prompt = JSON.parse(upstream.mock.calls[0][1].body).messages[1].content as string;
+  const material = JSON.parse(prompt.split("材料：")[1]);
+  expect(material.games.find((g: { appId: string }) => g.appId === "1").positions).toContainEqual({ country: "US", chart: "sales", rank: 1 });
+  expect(material.regionMatrix.find((r: { country: string }) => r.country === "US").n).toBe(3);
+  expect(material).toMatchObject({ momentumUsable: false, reviewWindow: fixture.reviewWindow });
+  expect(await (await analyze()).json()).toMatchObject({ cached: true });
+  expect(upstream).toHaveBeenCalledTimes(1);
+  writeFileSync(join(directory, "latest.json"), JSON.stringify({ ...fixture, runId: 200 }));
+  expect(await (await analyze()).json()).toMatchObject({ cached: false });
+  expect(upstream).toHaveBeenCalledTimes(2);
 });
 it("protects snapshots and AI mutations, invalidates replaced cache, and tolerates first-run absence", async () => {
   const directory = mkdtempSync(join(tmpdir(), "appgap-steam-route-"));
