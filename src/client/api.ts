@@ -24,9 +24,8 @@ export function fetchOpportunities(lens: LensId, country?: string) {
   return getJson<OpportunityListResponse>(`/api/opportunities?${params.toString()}`);
 }
 
-export function requestAnalysis(id: string, fresh = false) {
-  const q = fresh ? "?fresh=1" : "";
-  return getJson<{ markdown: string; createdAt: string; cached: boolean }>(`/api/apps/${id}/analyze${q}`, {
+export function requestAnalysis(id: string) {
+  return getJson<{ markdown: string; createdAt: string; cached: boolean; stale: boolean }>(`/api/apps/${id}/analyze`, {
     method: "POST",
   });
 }

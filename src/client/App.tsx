@@ -85,6 +85,7 @@ export function App() {
   const [pools, setPools] = useState<PoolState>({ watch: [], build: [] });
   const [showSource, setShowSource] = useState(false);
   const [aiText, setAiText] = useState<string | null>(null);
+  const [aiStale, setAiStale] = useState(false);
   const [aiAt, setAiAt] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -167,6 +168,7 @@ export function App() {
 
   useEffect(() => {
     setAiText(null);
+    setAiStale(false);
     currentApp.current = activeId;
     setAiAt(null);
     setAiError(null);
@@ -189,6 +191,7 @@ export function App() {
         if (data.ai) {
           setAiText(data.ai.markdown);
           setAiAt(data.ai.createdAt);
+          setAiStale(Boolean(data.ai.stale));
         }
       })
       .catch(() => {
@@ -230,16 +233,18 @@ export function App() {
     setPools(fresh);
   }
 
-  async function onAnalyze(fresh = false) {
+  async function onAnalyze() {
     if (!activeId) return;
+    if (aiText && !aiStale) return;
     const requestedId = activeId;
     setAiLoading(true);
     setAiError(null);
     try {
-      const result = await requestAnalysis(activeId, fresh);
+      const result = await requestAnalysis(activeId);
       if (currentApp.current !== requestedId) return;
       setAiText(result.markdown);
       setAiAt(result.createdAt);
+      setAiStale(false);
     } catch (err) {
       if (currentApp.current !== requestedId) return;
       setAiError(err instanceof Error ? err.message : "分析失败");
@@ -474,12 +479,13 @@ export function App() {
                 <div className="block">
                   <h3>DeepSeek 分析</h3>
                   <div className="actions">
-                    <button className="primary" disabled={aiLoading} onClick={() => void onAnalyze(!aiText)}>
-                      {aiLoading ? "正在分析…" : aiText ? "再跑一次" : "用 DeepSeek 分析"}
+                    <button className="primary" disabled={aiLoading || Boolean(aiText && !aiStale)} onClick={() => void onAnalyze()}>
+                      {aiLoading ? "正在分析…" : aiText ? aiStale ? "更新至当前快照" : "已读取共享缓存" : "生成／读取 DeepSeek 分析"}
                     </button>
                   </div>
                   {aiError && <p className="ai-error">{aiError}</p>}
-                  {aiLoading && <p className="orig">正在用 DeepSeek v4 Flash 看这份材料，大概十几秒。</p>}
+                  {aiLoading && <p className="orig">正在用已配置的 DeepSeek 模型分析，请稍候。</p>}
+                  {aiStale && <p className="orig">以下是最近缓存，应用数据已更新；需要时再更新分析。</p>}
                   {aiText && (
                     <>
                       {aiAt && <p className="orig">分析于 {aiAt.replace("T", " ").slice(0, 16)} UTC</p>}
@@ -487,7 +493,7 @@ export function App() {
                     </>
                   )}
                   {!aiText && !aiLoading && !aiError && (
-                    <p className="orig">点一次就会根据榜单、评分和评价写一份笔记。密钥只在服务器，不会进浏览器。</p>
+                    <p className="orig">优先复用 7 天内相同应用与快照的共享结果；相同请求合并，读取缓存不调用 AI。新生成与 Steam 共用每日额度。密钥仅在服务器。</p>
                   )}
                 </div>
                 <div className="block">

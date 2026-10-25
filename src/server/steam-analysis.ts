@@ -100,7 +100,9 @@ export function buildSteamView(
   const country = filters.get("country") || "ALL";
   if (country !== "ALL" && !snapshot.countries.some((c) => c.id === country))
     throw new Error("未知国家／地区");
-  const tag = filters.get("tag") || "";
+  const tag = (filters.get("tag") || "").normalize("NFKC").trim().toLowerCase();
+  const terms = tag.split("+").map((value) => value.trim()).filter(Boolean);
+  if (tag.length > 100 || terms.length > 4) throw new Error("标签最多 100 字、4 个组合条件");
   const monetization = filters.get("model") || "all";
   const chart = ["sales", "free", "players"].includes(
     filters.get("chart") || "",
@@ -113,6 +115,7 @@ export function buildSteamView(
   for (const row of snapshot.ranks)
     positions.set(row.appId, [...(positions.get(row.appId) || []), row]);
   const all = Object.values(snapshot.games);
+  const official = new Set(all.flatMap((g) => g.tags.map((t) => t.normalize("NFKC").toLowerCase())));
   const modelMatch = (game: SteamGame) =>
     monetization === "all" ||
     (monetization === "free" ? game.free : !game.free);
@@ -131,7 +134,9 @@ export function buildSteamView(
         (chart !== "free" || game.free),
     );
   const games = regionGames(country).filter(
-    (game) => !tag || game.tags.includes(tag),
+    (game) => terms.every((term) => official.has(term)
+      ? game.tags.some((t) => t.normalize("NFKC").toLowerCase() === term)
+      : `${game.name} ${game.description} ${game.tags.join(" ")}`.normalize("NFKC").toLowerCase().includes(term)),
   );
   const salesRegions = (group: SteamGame[]) =>
     new Set(

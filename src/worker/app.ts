@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { isCountryId, LENSES, lensById, type LensId, type PoolId } from "../shared/catalog";
 import type { OpportunityListResponse, OpportunityRow, RankPosition } from "../shared/types";
 import { chineseName, chineseOneLiner, localizeRegions } from "../shared/translate";
-import { runDeepseekAnalysis } from "./ai";
+import { readAppAnalysis, generateAppAnalysis } from "./app-ai";
+import { AnalysisError } from "./analysis-cache";
 import { loadAppDetail } from "./detail";
 import type { RuntimeEnv } from "./env";
 import { isActivelyIngesting } from "./ingestStatus";
@@ -248,38 +249,17 @@ app.get("/api/apps", async (context) => {
 app.get("/api/apps/:id", async (context) => {
   const detail = await loadAppDetail(context.env, context.req.param("id"));
   if (!detail) return context.json({ error: "not found" }, 404);
+  detail.ai = (await readAppAnalysis(context.env, context.req.param("id"))).analysis;
   return context.json(detail);
 });
 
 app.post("/api/apps/:id/analyze", async (context) => {
-  const id = context.req.param("id");
-  const fresh = context.req.query("fresh") === "1";
-  if (!fresh) {
-    try {
-      const cached = await context.env.DB.prepare(
-        "SELECT markdown, created_at AS createdAt FROM ai_analyses WHERE app_id = ?",
-      )
-        .bind(id)
-        .first<{ markdown: string; createdAt: string }>();
-      if (cached) return context.json({ markdown: cached.markdown, createdAt: cached.createdAt, cached: true });
-    } catch {
-      // table may not exist yet
-    }
-  }
-  const detail = await loadAppDetail(context.env, id);
-  if (!detail) return context.json({ error: "not found" }, 404);
   try {
-    const markdown = await runDeepseekAnalysis(context.env, detail);
-    const createdAt = new Date().toISOString();
-    await context.env.DB.prepare(
-      "INSERT OR REPLACE INTO ai_analyses (app_id, markdown, created_at) VALUES (?, ?, ?)",
-    )
-      .bind(id, markdown, createdAt)
-      .run();
-    return context.json({ markdown, createdAt, cached: false });
+    return context.json(await generateAppAnalysis(context.env, context.req.param("id")));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return context.json({ error: message }, 502);
+    if (error instanceof AnalysisError) return context.json({ error: error.message }, error.status);
+    console.error("App Store analysis failed", error instanceof Error ? error.message : "unknown");
+    return context.json({ error: "分析未完成，未缓存不完整结果，请稍后重试。" }, 502);
   }
 });
 

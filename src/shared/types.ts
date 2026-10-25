@@ -62,7 +62,7 @@ export type AppDetail = {
     pains: string[];
     move: string;
   };
-  ai: { markdown: string; createdAt: string } | null;
+  ai: { markdown: string; createdAt: string; stale?: boolean; dataCapturedAt?: string; runId?: number; cached?: boolean } | null;
 };
 
 export type MetaResponse = {

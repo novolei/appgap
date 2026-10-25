@@ -58,6 +58,8 @@
   color: var(--muted);
 }
 .steam-page select,
+.steam-tag-entry input,
+.steam-custom textarea,
 .steam-list-tools input {
   font: inherit;
   color: var(--ink);
@@ -68,6 +70,16 @@
   min-width: 0;
   max-width: 100%;
 }
+.steam-tag-field { display: grid; gap: 7px; align-content: start; }
+.steam-tag-entry { display: flex; gap: 5px; }
+.steam-tag-entry input { width: 100%; }
+.steam-tag-field small { font-size: 11px; color: var(--muted); }
+.steam-custom { padding: 18px 0; border-block: 1px solid var(--line); margin: 18px 0; }
+.steam-custom summary, .steam-ai summary { cursor: pointer; font-weight: 600; }
+.steam-custom form { display: grid; gap: 12px; padding-top: 16px; }
+.steam-custom label { display: grid; gap: 7px; font-size: 13px; }
+.steam-custom textarea { resize: vertical; width: 100%; box-sizing: border-box; }
+.steam-custom button { justify-self: start; }
 .steam-page button {
   cursor: pointer;
   font: inherit;

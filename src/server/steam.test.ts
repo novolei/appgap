@@ -94,6 +94,12 @@ it("deduplicates union games and keeps region matrix denominators outside tag se
   expect(view.summary.compared).toBe(0);
   expect(view.summary.medianPrice).toBe(10);
 });
+it("supports case-insensitive autocomplete values, custom text and AND tag combinations", () => {
+  expect(buildSteamView(fixture, new URLSearchParams({ tag: "pUzZlE" })).summary.n).toBe(2);
+  expect(buildSteamView(fixture, new URLSearchParams({ tag: "test" })).summary.n).toBe(3);
+  expect(buildSteamView(fixture, new URLSearchParams({ tag: "Puzzle + test" })).summary.n).toBe(2);
+  expect(buildSteamView(fixture, new URLSearchParams({ tag: "Puzzle + Action" })).summary.n).toBe(0);
+});
 it("derives regional free signals from sales and rejects nonexistent local player charts", () => {
   expect(
     buildSteamView(
@@ -154,6 +160,35 @@ it("gives AI regional evidence for ALL and refreshes its cache after a new snaps
   writeFileSync(join(directory, "latest.json"), JSON.stringify({ ...fixture, runId: 200 }));
   expect(await (await analyze()).json()).toMatchObject({ cached: false });
   expect(upstream).toHaveBeenCalledTimes(2);
+});
+it("isolates custom research and custom text filters from other sessions and public cache", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "appgap-steam-route-")); directories.push(directory);
+  writeFileSync(join(directory, "latest.json"), JSON.stringify(fixture));
+  const db = new SqliteDatabase(":memory:"); databases.push(db);
+  const env = { DB: db, SITE_PASSWORD: "test-site-password", DEEPSEEK_API_KEY: "fixture-key" };
+  const app = steamRoutes(env, directory, "https://appgap.test");
+  const login = (await loginResponse(env.SITE_PASSWORD, env, new Request("https://appgap.test"))).headers.get("set-cookie")!.split(";")[0];
+  async function actor() {
+    const response = await app.request("https://appgap.test/analysis", { headers: { cookie: login } });
+    expect(response.headers.get("set-cookie")).toContain("Secure");
+    return { cookie: login + "; " + response.headers.get("set-cookie")!.split(";")[0] };
+  }
+  const first = await actor(), second = await actor();
+  expect(first.cookie).not.toBe(second.cookie);
+  const upstream = vi.fn(async () => Response.json({ choices: [{ finish_reason: "stop", message: { content: "private research result" } }] }));
+  vi.stubGlobal("fetch", upstream);
+  async function ask(headers: { cookie: string }, tag = "", question = "our private concept") {
+    const response = await app.request(`https://appgap.test/analyze?tag=${tag}`, { method: "POST", headers, body: JSON.stringify({ question }) });
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+  expect(await ask(first)).toMatchObject({ cached: false, visibility: "session" });
+  expect(await ask(first)).toMatchObject({ cached: true });
+  expect(await ask(second)).toMatchObject({ cached: false, visibility: "session" });
+  expect((await (await app.request("https://appgap.test/analysis", { headers: second })).json() as { analysis: unknown }).analysis).toBeNull();
+  expect(await ask(first, "test", "")).toMatchObject({ visibility: "session", cached: false });
+  expect((await (await app.request("https://appgap.test/analysis?tag=test", { headers: second })).json() as { analysis: unknown }).analysis).toBeNull();
+  expect(upstream).toHaveBeenCalledTimes(3);
 });
 it("protects snapshots and AI mutations, invalidates replaced cache, and tolerates first-run absence", async () => {
   const directory = mkdtempSync(join(tmpdir(), "appgap-steam-route-"));

@@ -130,16 +130,6 @@ export async function loadAppDetail(env: DataEnv, id: string): Promise<AppDetail
     ai: null,
   };
 
-  try {
-    const cached = await env.DB.prepare(
-      "SELECT markdown, created_at AS createdAt FROM ai_analyses WHERE app_id = ?",
-    )
-      .bind(id)
-      .first<{ markdown: string; createdAt: string }>();
-    if (cached) detail.ai = { markdown: cached.markdown, createdAt: cached.createdAt };
-  } catch {
-    detail.ai = null;
-  }
 
   return detail;
 }

@@ -3,7 +3,8 @@ import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isAuthed } from "../worker/auth";
-import { generateAnalysis } from "../worker/ai";
+import { createHash } from "node:crypto";
+import { steamAiRoutes } from "./steam-ai";
 import type { RuntimeEnv } from "../worker/env";
 import type { SteamSnapshot } from "../shared/steam";
 import { buildSteamView } from "./steam-analysis";
@@ -14,8 +15,7 @@ export function steamRoutes(
   origin: string,
 ) {
   const app = new Hono();
-  let cached: { stamp: number; data: SteamSnapshot } | undefined;
-  let generating = false;
+  let cached: { stamp: number; data: SteamSnapshot; fingerprint: string } | undefined;
   const status = () => {
     try {
       return JSON.parse(
@@ -30,10 +30,11 @@ export function steamRoutes(
     const stat = statSync(path);
     if (stat.size > 25 * 1024 * 1024) throw new Error("快照超出读取上限");
     if (cached?.stamp !== stat.mtimeMs) {
-      const data = JSON.parse(readFileSync(path, "utf8")) as SteamSnapshot;
+      const raw = readFileSync(path, "utf8");
+      const data = JSON.parse(raw) as SteamSnapshot;
       if (data.schemaVersion !== 1 || !data.games || !Array.isArray(data.ranks))
         throw new Error("快照格式不兼容");
-      cached = { stamp: stat.mtimeMs, data };
+      cached = { stamp: stat.mtimeMs, data, fingerprint: createHash("sha256").update(raw).digest("hex") };
     }
     return cached!.data;
   };
@@ -120,91 +121,9 @@ export function steamRoutes(
   app.get("/methodology", (c) =>
     c.text(readFileSync("docs/steam-methodology.md", "utf8")),
   );
-  app.post("/analyze", async (c) => {
-    let data: SteamSnapshot;
-    try {
-      data = snapshot();
-    } catch {
-      return c.json({ error: "尚无已发布快照" }, 503);
-    }
-    const query = new URL(c.req.url).searchParams;
-    const country = query.get("country") || "ALL",
-      tag = (query.get("tag") || "").slice(0, 100),
-      model = query.get("model") || "all",
-      chart = query.get("chart") || "sales";
-    const key = `steam:brief-v2:${data.runId}:${data.analysisVersion || "base"}:${env.DEEPSEEK_MODEL || "deepseek-flash"}:${JSON.stringify([country, tag, model, chart])}`;
-    const previous = await env.DB.prepare(
-      "SELECT markdown, created_at AS createdAt FROM ai_analyses WHERE app_id=?",
-    )
-      .bind(key)
-      .first<{ markdown: string; createdAt: string }>();
-    if (previous) return c.json({ ...previous, cached: true });
-    if (generating)
-      return c.json({ error: "已有一份 Steam 分析正在生成，请稍后" }, 429);
-    generating = true;
-    try {
-      const view = buildSteamView(
-        data,
-        new URLSearchParams({ country, tag, model, chart }),
-      );
-      const material = {
-        capturedAt: view.capturedAt,
-        reviewWindow: data.reviewWindow,
-        reviewCoverage: view.reviewCoverage,
-        comparisonDates: view.comparisonDates,
-        momentumUsable: view.momentumUsable,
-        totalGames: view.totalGames,
-        gameDetailLimit: 15,
-        country,
-        tag,
-        model,
-        chart,
-        summary: view.summary,
-        windows: view.windows,
-        genreStats: view.genreStats.slice(0, 15),
-        regionMatrix: view.matrix,
-        games: view.games.slice(0, 15).map((g) => ({
-          appId: g.appId,
-          name: g.name,
-          url: g.url,
-          tags: g.tags,
-          priceUsd: g.priceUsd,
-          free: g.free,
-          subscription: Boolean(g.subscription),
-          positions: g.positions
-            .filter((p) => country === "ALL" || p.country === country)
-            .map(({ country, chart, rank }) => ({ country, chart, rank })),
-          opportunity: g.opportunity,
-          topics: g.topics,
-          sampleN: g.sampleN,
-          recentReviews: data.games[g.appId].reviews ? {
-            matching30Days: data.games[g.appId].reviews!.matching30Days,
-            negativeMatching30Days: data.games[g.appId].reviews!.negativeMatching30Days,
-            negativeRate30Days: data.games[g.appId].reviews!.negativeRate30Days,
-            evidence: data.games[g.appId].reviews!.evidence.slice(0, 2),
-          } : null,
-        })),
-      };
-      const markdown = await generateAnalysis(
-        env,
-        `面向独立游戏开发者，以以下快照写中文决策备忘录。收入榜仅为排名，不能得出销量、金额、市场份额或用户国家；评论语言不是地区。痛点为关键词线索，先核原文；momentumUsable=false 时基线缺失或过旧，严禁用 rising/compared/averageRankChange 推断当前增长，更不能声称长期趋势。地区矩阵是标签在各地区入样游戏中的 n/denominator，index 是相对全球样本入榜指数，不是市场份额；标签重叠。仅提供优先级排序前15款详情，不能把这15款当成全体样本。窗口是待验证的假设，机会分是内部启发式，不是成功概率。分段：事实和证据、谁在付钱（付费产品/免费内购信号）、类型与地区、机会窗口、反证和竞争、两周最小原型和停损、仍缺数据。每个结论引用游戏名/地区/分母，明确事实与假设。原文短摘录只支持关键词线索，不按语言推断国家。材料：${JSON.stringify(material)}`,
-      );
-      const createdAt = new Date().toISOString();
-      await env.DB.prepare(
-        "INSERT OR REPLACE INTO ai_analyses(app_id,markdown,created_at) VALUES(?,?,?)",
-      )
-        .bind(key, markdown, createdAt)
-        .run();
-      return c.json({ markdown, createdAt, cached: false });
-    } catch (error) {
-      console.error(
-        "Steam analysis failed",
-        error instanceof Error ? error.message : "unknown",
-      );
-      return c.json({ error: "分析未完成，请稍后重试" }, 502);
-    } finally {
-      generating = false;
-    }
-  });
+  app.route("/", steamAiRoutes(env, () => {
+    const data = snapshot();
+    return { data, fingerprint: cached!.fingerprint };
+  }, origin));
   return app;
 }

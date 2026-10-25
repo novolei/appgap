@@ -43,6 +43,7 @@ ${reviews || "（没有评价）"}
 export async function generateAnalysis(env: EnvAi, prompt: string): Promise<string> {
   const key = env.DEEPSEEK_API_KEY;
   if (!key) throw new Error("未配置 DEEPSEEK_API_KEY");
+  if (new TextEncoder().encode(prompt).byteLength > 128 * 1024) throw new Error("分析材料过长，请缩小范围。");
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     signal: AbortSignal.timeout(85000),
@@ -65,8 +66,7 @@ export async function generateAnalysis(env: EnvAi, prompt: string): Promise<stri
     }),
   });
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`DeepSeek ${response.status}: ${err.slice(0, 200)}`);
+    throw new Error(`DeepSeek 请求失败（HTTP ${response.status}），未记录上游正文。`);
   }
   const json = (await response.json()) as {
     model?: string;

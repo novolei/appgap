@@ -11,6 +11,7 @@ export type SteamRank = {
   discountPct?: number;
   peakPlayers?: number;
 };
+
 export type SteamReview = {
   negativeRate30Days?: number | null;
   allSampleN: number;

@@ -1,0 +1,31 @@
+import { afterEach, expect, it, vi } from "vitest";
+import worker from "../index";
+import { SqliteDatabase } from "../server/database";
+import { loginResponse } from "./auth";
+import type { RuntimeEnv } from "./env";
+let db: SqliteDatabase | undefined;
+afterEach(() => { db?.close(); db = undefined; vi.unstubAllGlobals(); });
+
+it("shares per-app output, ignores forced refresh, merges concurrency and invalidates on new data", async () => {
+  db = new SqliteDatabase(":memory:");
+  const stamp = new Date().toISOString();
+  db.sqlite.exec(`INSERT INTO apps(id,name,artist_name,updated_at) VALUES('42','Fixture Game','Studio','${stamp}');
+    INSERT INTO opportunities(lens,app_id,score,country,chart,genre_id,rank) VALUES('paid_games','42',50,'us','grossing','6014',1);
+    INSERT INTO app_reviews(app_id,country,rating,title,content,fetched_at) VALUES('42','us',3,'fixture','test controls','${stamp}');
+    INSERT INTO ingest_runs(started_at,finished_at,status) VALUES('${stamp}','${stamp}','success');`);
+  const env: RuntimeEnv = { DB: db, SITE_PASSWORD: "fixture-password", DEEPSEEK_API_KEY: "fixture-key" };
+  const cookie = (await loginResponse(env.SITE_PASSWORD!, env, new Request("https://appgap.test"))).headers.get("set-cookie")!.split(";")[0];
+  const upstream = vi.fn(async () => Response.json({ choices: [{ finish_reason: "stop", message: { content: "## 事实\nFixture result" } }] }));
+  vi.stubGlobal("fetch", upstream);
+  const call = (path: string, method = "POST") => worker.fetch(new Request("https://appgap.test" + path, { method, headers: { cookie } }), env, {} as ExecutionContext);
+  const responses = await Promise.all([call("/api/apps/42/analyze"), call("/api/apps/42/analyze?fresh=1")]);
+  expect(responses.map((r) => r.status)).toEqual([200, 200]);
+  expect(upstream).toHaveBeenCalledTimes(1);
+  expect(await (await call("/api/apps/42/analyze?fresh=1")).json()).toMatchObject({ cached: true });
+  const detail = await (await call("/api/apps/42", "GET")).json() as { ai: { cached: boolean; stale: boolean } };
+  expect(detail.ai).toMatchObject({ cached: true, stale: false });
+  await db.prepare("INSERT INTO ingest_runs(started_at,finished_at,status) VALUES(?,?,'success')").bind(stamp, stamp).run();
+  expect((await (await call("/api/apps/42", "GET")).json() as { ai: { stale: boolean } }).ai.stale).toBe(true);
+  expect(await (await call("/api/apps/42/analyze")).json()).toMatchObject({ cached: false, runId: 2 });
+  expect(upstream).toHaveBeenCalledTimes(2);
+});

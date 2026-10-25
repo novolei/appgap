@@ -1,3 +1,4 @@
+import type { AiAnalysis } from "../shared/ai";
 import { useEffect, useRef, useState } from "react";
 import type {
   SteamGame,
@@ -72,6 +73,12 @@ export function SteamApp() {
     [loading, setLoading] = useState(true),
     [tab, setTab] = useState("windows"),
     [query, setQuery] = useState("");
+  const [tagDraft, setTagDraft] = useState(tag);
+  const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [customAnalysis, setCustomAnalysis] = useState<AiAnalysis | null>(null);
+  const [question, setQuestion] = useState(""), [notes, setNotes] = useState("");
+  const [budget, setBudget] = useState<{ remaining: number; limit: number } | null>(null);
   const [detail, setDetail] = useState<{
       game: SteamGame;
       positions: SteamRank[];
@@ -79,8 +86,7 @@ export function SteamApp() {
       reviewWindow: SteamSnapshot["reviewWindow"];
     } | null>(null),
     [selected, setSelected] = useState<string | null>(null);
-  const [markdown, setMarkdown] = useState(""),
-    [analyzing, setAnalyzing] = useState(false),
+  const [analyzing, setAnalyzing] = useState(false),
     [method, setMethod] = useState(""),
     [notice, setNotice] = useState("");
   const [pools, setPools] = useState<{ watch: string[]; build: string[] }>({
@@ -91,6 +97,9 @@ export function SteamApp() {
   const params = new URLSearchParams({ country, tag, model, chart }).toString();
   const activeScope = useRef(params);
   activeScope.current = params;
+  const activeCustom = useRef("");
+  activeCustom.current = JSON.stringify([params, question, notes]);
+  useEffect(() => setTagDraft(tag), [tag]);
   useEffect(() => {
     document.title = "AppGap · Steam 游戏机会研究";
   }, []);
@@ -98,7 +107,9 @@ export function SteamApp() {
     const abort = new AbortController();
     setLoading(true);
     setError("");
-    setMarkdown("");
+    setAnalysis(null);
+    setCustomAnalysis(null);
+    setAnalysisOpen(false);
     history.replaceState(null, "", `/steam?${params}`);
     request<SteamView>(`/api/steam/view?${params}`, { signal: abort.signal })
       .then(setView)
@@ -108,6 +119,9 @@ export function SteamApp() {
       .finally(() => {
         if (!abort.signal.aborted) setLoading(false);
       });
+    request<{ analysis: AiAnalysis | null; budget: { remaining: number; limit: number } }>(`/api/steam/analysis?${params}`, { signal: abort.signal })
+      .then((result) => { if (!abort.signal.aborted) { setAnalysis(result.analysis); setBudget(result.budget); } })
+      .catch((e) => { if (!abort.signal.aborted) setNotice(`缓存暂不可用：${e.message}`); });
     return () => abort.abort();
   }, [params]);
   useEffect(() => {
@@ -165,15 +179,24 @@ export function SteamApp() {
       setNotice(String(e));
     }
   }
-  async function analyze() {
+  async function analyze(custom = false) {
+    if (!custom && analysis && !analysis.stale) { setAnalysisOpen(true); return; }
+    const expectedCustom = JSON.stringify([params, question, notes]);
     setAnalyzing(true);
     setNotice("");
     try {
-      const result = await request<{ markdown: string }>(
+      const result = await request<AiAnalysis & { budget: { remaining: number; limit: number } }>(
         `/api/steam/analyze?${params}`,
-        { method: "POST" },
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(custom ? { question, notes } : {}) },
       );
-      if (activeScope.current === params) setMarkdown(result.markdown);
+      if (activeScope.current === params && (!custom || activeCustom.current === expectedCustom)) {
+        if (custom) setCustomAnalysis(result); else { setAnalysis(result); setAnalysisOpen(true); }
+        setBudget(result.budget);
+        if (result.runId !== view?.runId) {
+          const latest = await request<SteamView>(`/api/steam/view?${params}`);
+          if (activeScope.current === params) setView(latest);
+        }
+      }
     } catch (e) {
       setNotice(String(e));
     } finally {
@@ -301,15 +324,18 @@ export function SteamApp() {
             </option>
           </select>
         </label>
-        <label>
-          游戏标签
-          <select value={tag} onChange={(e) => setTag(e.target.value)}>
-            <option value="">全部类型</option>
-            {view?.tags.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-        </label>
+        <div className="steam-tag-field">
+          <label htmlFor="steam-tag-input">游戏标签</label>
+          <div className="steam-tag-entry">
+            <input id="steam-tag-input" list="steam-tag-options" value={tagDraft} maxLength={100}
+              placeholder="全部类型；输入标签或关键词" autoComplete="off"
+              onChange={(e) => setTagDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setTag(tagDraft.trim()); } }} />
+            <button type="button" onClick={() => setTag(tagDraft.trim())}>应用</button>
+          </div>
+          <datalist id="steam-tag-options">{view?.tags.map((t) => <option key={t} value={t} />)}</datalist>
+          <small>可自定义文字匹配；用 + 组合，留空显示全部。</small>
+        </div>
         <label>
           商业模式
           <select value={model} onChange={(e) => setModel(e.target.value)}>
@@ -412,13 +438,35 @@ export function SteamApp() {
                     款时仅作线索；原型阈值是建议的内部闸门。
                   </p>
                 </div>
-                <button onClick={analyze} disabled={analyzing || loading}>
-                  {analyzing ? "正在生成…" : "DeepSeek 综合论证"}
+                <button onClick={() => void analyze()} disabled={analyzing || loading}>
+                  {analyzing ? "正在生成…" : analysis && !analysis.stale ? "阅读已有缓存" : analysis ? "更新到当前数据" : "DeepSeek 综合论证"}
                 </button>
               </div>
               <p className="steam-footnote">
-                点击综合论证会调用已配置的付费模型，同一快照与筛选条件复用缓存。数据采集和下列统计不调用模型。
+                已有分析自动读取；标准标签筛选共享缓存，自定义文字条件与资料按会话隔离。相同请求合并，只有缺少当前分析时才调用付费模型。
+                {budget && `今日新研究剩余 ${budget.remaining}/${budget.limit} 次（App Store 与 Steam 共用，香港时间重置），读取缓存不扣额度。`}
               </p>
+              {analysis && (
+                <details className="steam-ai" open={analysisOpen} onToggle={(e) => setAnalysisOpen(e.currentTarget.open)}>
+                  <summary>综合论证 · {analysis.stale ? "最近缓存，数据已更新" : analysis.visibility === "shared" ? "共享缓存" : "会话缓存"}</summary>
+                  <p className="steam-footnote">分析生成于 {new Date(analysis.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Hong_Kong" })}，基于 {new Date(analysis.dataCapturedAt).toLocaleString("zh-CN", { timeZone: "Asia/Hong_Kong" })} 的快照 #{analysis.runId}。{analysis.stale ? "这是旧数据的分析，不代表当前快照；可按需更新。" : "当前缓存有效，不会重复调用模型。"} 模型推断仍需核对原始证据。</p>
+                  <Markdown text={analysis.markdown} />
+                </details>
+              )}
+              <details className="steam-custom">
+                <summary>自定义研究 · 描述你的游戏设想</summary>
+                <form onSubmit={(e) => { e.preventDefault(); void analyze(true); }}>
+                  <label>研究问题（最多 400 字）<textarea value={question} maxLength={400} required rows={3}
+                    placeholder="例如：小团队制作 2 人合作的载具肉鸽，应该先验证什么？"
+                    onChange={(e) => { setQuestion(e.target.value); setCustomAnalysis(null); }} /></label>
+                  <label>补充资料（可选，最多 1500 字）<textarea value={notes} maxLength={1500} rows={4}
+                    placeholder="团队规模、预算约束、玩法描述或待核验资料。不会自动访问其中的网址。"
+                    onChange={(e) => { setNotes(e.target.value); setCustomAnalysis(null); }} /></label>
+                  <p className="steam-footnote">结果仅绑定当前浏览器登录会话，缓存 24 小时，不加入公共分析；每会话每天最多 5 次新研究。新生成会将问题、资料和选中证据发给 DeepSeek，命中缓存则不再发送。不自动联网检索，账号注册尚未启用。</p>
+                  <button disabled={analyzing || loading || !question.trim()}>{analyzing ? "正在生成…" : "生成／读取私有研究"}</button>
+                </form>
+                {customAnalysis && <article className="steam-ai"><h3>自定义研究 · 会话隔离</h3><p className="steam-footnote">{customAnalysis.cached ? "已读取私有缓存" : customAnalysis.coalesced ? "已合并相同请求" : "已生成并缓存"} · 基于快照 #{customAnalysis.runId}，生成于 {new Date(customAnalysis.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Hong_Kong" })}。</p><Markdown text={customAnalysis.markdown} /></article>}
+              </details>
               <div className="steam-window-grid">
                 {view.windows.map((w, index) => (
                   <article className="steam-window" key={w.id}>
@@ -468,12 +516,6 @@ export function SteamApp() {
                   </article>
                 ))}
               </div>
-              {markdown && (
-                <article className="steam-ai">
-                  <h2>综合论证 · 模型推断，需核原始证据</h2>
-                  <Markdown text={markdown} />
-                </article>
-              )}
               <p className="steam-footnote">
                 有评论痛点不代表存在可盈利的空缺；修复老游戏的问题，也不意味着玩家会迁移到新产品。下一步仍需试玩、访谈和愿望单实验。
               </p>
