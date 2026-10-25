@@ -9,6 +9,7 @@ import { SqliteDatabase } from "./database";
 import { loginResponse } from "../worker/auth";
 import { csvCell } from "../shared/steam-export";
 import { hash,ownerHash } from "./account-security";
+import { Hono } from "hono";
 
 it("exports untrusted game titles without spreadsheet formulas", () => {
   expect(csvCell('=HYPERLINK("https://evil.test")')).toBe(
@@ -135,6 +136,27 @@ afterEach(() => {
       throw Error("unsafe temporary path");
     rmSync(path, { recursive: true });
   });
+});
+it("protects versioned images, overrides no-store and supports conditional browser caching",async()=>{
+  const directory=mkdtempSync(join(tmpdir(),"appgap-steam-route-"));directories.push(directory);
+  const image="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1/capsule_231x87.jpg?t=1";
+  writeFileSync(join(directory,"latest.json"),JSON.stringify({...fixture,games:{...fixture.games,"1":{...fixture.games["1"],image}}}));
+  const db=new SqliteDatabase(":memory:");databases.push(db);
+  const env={DB:db,SITE_PASSWORD:"test-site-password"};
+  const app=new Hono();app.use("*",async(c,next)=>{c.header("Cache-Control","no-store");await next();});app.route("/",steamRoutes(env,directory,"https://appgap.test"));
+  const cookie=(await loginResponse(env.SITE_PASSWORD,env,new Request("https://appgap.test"))).headers.get("set-cookie")!.split(";")[0];
+  const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6T8AAAAASUVORK5CYII=","base64");
+  const upstream=vi.fn(async()=>new Response(png));vi.stubGlobal("fetch",upstream);
+  const path="https://appgap.test/image/1?v="+encodeURIComponent(image);
+  expect((await app.request(path)).status).toBe(401);
+  expect((await app.request("https://appgap.test/image/1?v=https://evil.test",{headers:{cookie}})).status).toBe(404);
+  expect(upstream).not.toHaveBeenCalled();
+  const first=await app.request(path,{headers:{cookie}});
+  expect(first.status).toBe(200);expect(first.headers.get("cache-control")).toBe("private, max-age=604800, immutable");
+  expect(first.headers.get("content-type")).toBe("image/png");expect(first.headers.get("x-image-cache")).toBe("MISS");
+  expect(Buffer.from(await first.arrayBuffer())).toEqual(png);
+  const repeated=await app.request(path,{headers:{cookie,"if-none-match":first.headers.get("etag")!}});
+  expect(repeated.status).toBe(304);expect(repeated.headers.get("x-image-cache")).toBe("HIT");expect(upstream).toHaveBeenCalledTimes(1);
 });
 it("gives AI regional evidence for ALL and refreshes its cache after a new snapshot", async () => {
   const directory = mkdtempSync(join(tmpdir(), "appgap-steam-route-"));

@@ -8,6 +8,7 @@ import type {
 } from "../shared/steam";
 import { Markdown } from "./Markdown";
 import { TagPicker } from "./TagPicker";
+import { SteamImage } from "./SteamImage";
 import { savePool } from "./api";
 import { csvCell } from "../shared/steam-export";
 import "./steam.css";
@@ -558,12 +559,12 @@ export function SteamApp() {
                       <tr key={g.appId}>
                         <th>
                           <button
-                            className="steam-game-link"
+                            className="steam-game-link steam-game-item"
                             onClick={() => setSelected(g.appId)}
                           >
-                            {g.name}
+                            <SteamImage appId={g.appId} name={g.name} image={g.image}/>
+                            <span className="steam-game-copy"><strong>{g.name}</strong><small>{g.tags.slice(0,3).join(" · ")}</small></span>
                           </button>
-                          <small>{g.tags.slice(0, 3).join(" · ")}</small>
                         </th>
                         <td>
                           {g.free ? "免费本体" : g.subscription ? `订阅 · 首期 ${money(g.priceUsd)}` : money(g.priceUsd)}

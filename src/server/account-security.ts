@@ -5,7 +5,7 @@ import type { RuntimeEnv } from "../worker/env";
 export const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 export const ownerHash = (id: string) => hash(`account:${id}`);
 export const secret = () => randomBytes(32).toString("base64url");
-export function passwordValid(value: unknown): value is string { return typeof value === "string" && value.length >= 12 && value.length <= 128; }
+export function passwordValid(value: unknown): value is string { return typeof value === "string" && value.length >= 8 && value.length <= 128; }
 let hashing = 0;
 async function derive(password: string, salt: string) {
   if (hashing >= 2) throw new Error("密码验证繁忙，请稍后再试。");

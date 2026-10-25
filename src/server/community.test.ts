@@ -4,7 +4,7 @@ import { accountRoutes } from "./accounts";
 import { amountMinor,donationRoutes } from "./donations";
 import { SqliteDatabase } from "./database";
 import { authenticatedUser,loginResponse } from "../worker/auth";
-import { ownerHash } from "./account-security";
+import { ownerHash,passwordValid } from "./account-security";
 import type { RuntimeEnv } from "../worker/env";
 import worker from "../index";
 import { mkdtempSync,writeFileSync,rmSync } from "node:fs";
@@ -34,6 +34,23 @@ it("consumes recovery codes once and invalidates every earlier login",async()=>{
   expect((await app.request(request("/api/account/recover",{username:"alpha",recoveryCode:a.body.recoveryCode,newPassword:"a-new-fixture-password"}))).status).toBe(401);
   expect((await app.request(request("/api/account/login",{username:"alpha",password:"fixture-password-123"}))).status).toBe(401);
   expect((await app.request(request("/api/account/login",{username:"alpha",password:"a-new-fixture-password"}))).status).toBe(200);
+});
+it("accepts eight-character passwords for registration, changes and recovery, rejecting seven",async()=>{
+  for(const value of [null,12345678,"1234567","x".repeat(129)])expect(passwordValid(value)).toBe(false);
+  expect(passwordValid("12345678")).toBe(true);expect(passwordValid("x".repeat(128))).toBe(true);
+  const {app,env}=setup();
+  expect((await app.request(request("/api/account/register",{username:"eight",password:"1234567"}))).status).toBe(400);
+  const registered=await app.request(request("/api/account/register",{username:"eight",password:"test1234"}));expect(registered.status).toBe(201);
+  const cookie=registered.headers.get("set-cookie")!.split(";")[0];
+  const oldCode=(await registered.json() as {recoveryCode:string}).recoveryCode;
+  expect((await app.request(request("/api/account/login",{username:"eight",password:"test1234"}))).status).toBe(200);
+  expect((await app.request(request("/api/account/password",{password:"test1234",newPassword:"1234567"},cookie))).status).toBe(400);
+  const changed=await app.request(request("/api/account/password",{password:"test1234",newPassword:"next1234"},cookie));expect(changed.status).toBe(200);
+  const newCode=(await changed.json() as {recoveryCode:string}).recoveryCode;expect(newCode).not.toBe(oldCode);
+  expect(await authenticatedUser(request("/",undefined,cookie),env)).toBeNull();
+  expect((await app.request(request("/api/account/recover",{username:"eight",recoveryCode:newCode,newPassword:"1234567"}))).status).toBe(400);
+  expect((await app.request(request("/api/account/recover",{username:"eight",recoveryCode:newCode,newPassword:"back1234"}))).status).toBe(200);
+  expect((await app.request(request("/api/account/login",{username:"eight",password:"back1234"}))).status).toBe(200);
 });
 it("isolates saved pools and report history while retaining the administrator's legacy data",async()=>{
   const {app,env}=setup(),a=await register(app,"alpha"),b=await register(app,"beta");

@@ -15,6 +15,7 @@ Node 24.19.0；`pnpm install --frozen-lockfile`、`pnpm test`、`python -m unitt
 - `appgap.service`：仅 `127.0.0.1:8790`，非 root、受限文件写入、768 MiB 上限（含有大小限制的导入子进程）。
 - `appgap-ingest.timer`：每周一香港时间 08:30；可用 `systemctl start --no-block appgap-ingest.service` 人工触发。任务最多 55 分钟，数据库锁 60 分钟后过期；不要并发手工绕过。
 - `appgap-backup.timer`：每天香港时间 03:20；在线一致性备份到 `/var/backups/appgap/`，主库保留 30 天，Steam 快照 / 历史保留 7 天。独立于已有 Mini Tanks 备份，当前不冒充异地容灾。
+- Steam 游戏列表图片按需缓存于 `/var/lib/appgap/steam/images/`，独立于 release；上游仅允许快照中匹配 appId 的 Steam 图片 CDN 地址，禁止重定向。图片按源 URL 版本存储，7 天后后台刷新；故障时复用旧图，无图显示名称首字。总量最多 32 MiB / 1,000 文件，单张 256 KiB，同时下载 2 张、最多排队 64 个不同请求；同图合并请求，失败退避 10 分钟。写入时淘汰最旧文件并清理 30 天旧项；原子替换暂存额外占用至多一张图片。浏览器私有缓存 7 天、ETag 支持 304；API 仍要求登录。图片可重建，不加入主库 / Steam 备份；不增加 Actions 存储或 DeepSeek 调用。
 
 ## Cloudflare 与秘密
 

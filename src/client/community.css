@@ -92,3 +92,10 @@ body{background:var(--bg)}button,input,textarea,select{font:inherit}button,a,inp
 .app-pool-tabs button[aria-pressed="true"] .app-pool-count{background:#ffffff24;color:white}
 @media(max-width:1050px){.app-lens-nav{flex-wrap:wrap;gap:10px}.app-lens-tabs{flex:1 1 100%}.app-pool-tabs{margin-left:auto;padding-left:0;border-left:0}}
 @media(max-width:650px){.app-lens-nav{align-items:stretch;margin-top:16px}.app-lens-tabs{flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:thin;scroll-padding:5px}.app-lens-tabs button{flex:0 0 auto;padding-inline:12px}.app-pool-tabs{margin-left:0;justify-content:flex-end;width:100%}.app-pool-tabs button{min-height:36px}}
+.steam-page .steam-game-item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;white-space:normal}
+.steam-game-thumb{display:flex;flex:0 0 96px;align-items:center;justify-content:center;width:96px;height:36px;overflow:hidden;border:1px solid var(--line);border-radius:6px;background:#edf1e7;color:var(--accent)}
+.steam-game-thumb img{display:block;width:96px;height:36px;object-fit:cover}
+.steam-game-thumb>span{font-size:18px;font-weight:600}
+.steam-game-copy{min-width:0;display:block}
+.steam-game-copy strong{font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.steam-page .steam-game-copy small{display:block;margin-top:4px;font-size:11px;line-height:1.7;font-weight:400;color:var(--muted)}

@@ -8,6 +8,7 @@ import { steamAiRoutes } from "./steam-ai";
 import type { RuntimeEnv } from "../worker/env";
 import type { SteamSnapshot } from "../shared/steam";
 import { buildSteamView } from "./steam-analysis";
+import { SteamImageCache } from "./steam-images";
 
 export function steamRoutes(
   env: RuntimeEnv,
@@ -15,6 +16,7 @@ export function steamRoutes(
   origin: string,
 ) {
   const app = new Hono();
+  const images=new SteamImageCache(join(directory,"images"));
   let cached: { stamp: number; data: SteamSnapshot; fingerprint: string } | undefined;
   const status = () => {
     try {
@@ -50,6 +52,18 @@ export function steamRoutes(
     await next();
   });
   app.get("/status", (c) => c.json(status()));
+  app.get("/image/:id",async c=>{
+    try{
+      const game=snapshot().games[c.req.param("id")];
+      if(!game?.image||c.req.query("v")!==game.image)return c.body(null,404);
+      const image=await images.get(game.appId,game.image);
+      if(!image){c.header("Cache-Control","private, max-age=300");return c.body(null,404);}
+      c.header("Cache-Control",image.state==="STALE"?"private, max-age=300":"private, max-age=604800, immutable");
+      c.header("ETag",image.etag);c.header("X-Image-Cache",image.state);
+      if(c.req.header("if-none-match")===image.etag)return c.body(null,304);
+      c.header("Content-Type",image.mime);return c.body(new Uint8Array(image.bytes));
+    }catch{c.header("Cache-Control","private, max-age=60");return c.body(null,503);}
+  });
   app.get("/view", (c) => {
     try {
       return c.json({

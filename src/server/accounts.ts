@@ -34,7 +34,7 @@ export function accountRoutes(env: RuntimeEnv,origin: string) {
   app.post("/register",async c => {
     const body=await credentials(c);
     const username=typeof body.username==="string" ? body.username.trim().toLowerCase() : "";
-    if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(username) || !passwordValid(body.password)) throw new HTTPException(400,{message:"用户名为 3–24 位字母、数字、下划线或短横线；密码为 12–128 个字符。"});
+    if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(username) || !passwordValid(body.password)) throw new HTTPException(400,{message:"用户名为 3–24 位字母、数字、下划线或短横线；密码为 8–128 个字符。"});
     const name=typeof body.displayName==="string" ? body.displayName.trim() : username;
     if (!name || name.length>32 || /[\u0000-\u001f\u007f]/.test(name)) throw new HTTPException(400,{message:"昵称为 1–32 个可见字符。"});
     await gate(c,username);
@@ -58,7 +58,7 @@ export function accountRoutes(env: RuntimeEnv,origin: string) {
   });
   app.post("/recover",async c => {
     const body=await credentials(c),username=typeof body.username==="string" ? body.username.trim().toLowerCase() : "";
-    if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(username) || typeof body.recoveryCode!=="string" || !/^[A-Za-z0-9_-]{43}$/.test(body.recoveryCode) || !passwordValid(body.newPassword)) throw new HTTPException(400,{message:"请填写用户名、有效恢复码和至少 12 字符的新密码。"});
+    if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(username) || typeof body.recoveryCode!=="string" || !/^[A-Za-z0-9_-]{43}$/.test(body.recoveryCode) || !passwordValid(body.newPassword)) throw new HTTPException(400,{message:"请填写用户名、有效恢复码和至少 8 字符的新密码。"});
     await gate(c,username);
     const user=await env.DB.prepare("SELECT id FROM users WHERE username=? AND recovery_hash=?").bind(username,hash(body.recoveryCode)).first<{id:string}>();
     if (!user) throw new HTTPException(401,{message:"账号或恢复码不正确，或恢复码已使用。"});
@@ -101,7 +101,7 @@ export function accountRoutes(env: RuntimeEnv,origin: string) {
   });
   app.post("/password",async c => {
     const user=(await actor(c.req.raw))!,body=await credentials(c);
-    if(typeof body.password!=="string" || body.password.length>128 || !passwordValid(body.newPassword)) throw new HTTPException(400,{message:"新密码至少 12 个字符。"});
+    if(typeof body.password!=="string" || body.password.length>128 || !passwordValid(body.newPassword)) throw new HTTPException(400,{message:"新密码至少 8 个字符。"});
     await gate(c,user.username);
     const stored=await env.DB.prepare("SELECT password_hash AS passwordHash FROM users WHERE id=?").bind(user.id).first<{passwordHash:string|null}>();
     if(!await passwordMatches(body.password,stored?.passwordHash||null)) throw new HTTPException(401,{message:"当前密码不正确。"});
