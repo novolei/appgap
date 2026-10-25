@@ -37,7 +37,8 @@ export function buildExportMarkdown(detail: AppDetail, ai?: string | null): stri
       return orig ? `- ${zh}\n  原文：${orig}` : `- ${zh}`;
     })
     .join("\n");
-  return `# ${detail.app.name} — ${detail.app.nameZh}
+  const title = detail.app.nameZh && detail.app.nameZh !== detail.app.name ? `${detail.app.name} — ${detail.app.nameZh}` : detail.app.name;
+  return `# ${title}
 
 - 开发者：${detail.app.artistName}
 - 干什么：${detail.app.oneLiner}

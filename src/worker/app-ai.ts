@@ -13,20 +13,11 @@ export async function readAppAnalysis(env: RuntimeEnv, id: string) {
   const row = await env.DB.prepare("SELECT updated_at AS updatedAt FROM apps WHERE id=?").bind(id).first<{ updatedAt: string }>();
   if (!row) throw new AnalysisError("未知应用。", 404);
   const latest = await latestSuccessfulIngest(env), cache = analysisCache(env.DB);
-  const scope = await digest(["appstore-brief-v2", id, env.DEEPSEEK_MODEL || "deepseek-flash"]);
+  const scope = await digest(["appstore-brief-v3", id, env.DEEPSEEK_MODEL || "deepseek-flash"]);
   const identity: AnalysisIdentity = { key: await digest([scope, latest?.id || 0, row.updatedAt]), scope,
     owner: "", visibility: "shared", runId: latest?.id || 0,
     dataCapturedAt: latest?.finished_at || latest?.started_at || (Number.isFinite(Date.parse(row.updatedAt)) ? row.updatedAt : "") };
-  let analysis = await cache.read(identity);
-  if (!analysis) {
-    const legacy = await env.DB.prepare("SELECT markdown,created_at AS createdAt FROM ai_analyses WHERE app_id=? AND created_at>?")
-      .bind(id, new Date(Date.now() - 7 * 86400000).toISOString()).first<{ markdown: string; createdAt: string }>();
-    if (legacy) {
-      const current = !identity.dataCapturedAt || Date.parse(legacy.createdAt) >= Date.parse(identity.dataCapturedAt);
-      await cache.save(current ? identity : { ...identity, key: `legacy-appstore:${id}:${legacy.createdAt}`, runId: -1, dataCapturedAt: "" }, legacy.markdown, legacy.createdAt);
-    }
-    analysis = await cache.read(identity) || await cache.read(identity, true);
-  }
+  const analysis = await cache.read(identity) || await cache.read(identity, true);
   return { cache, identity, analysis };
 }
 export async function generateAppAnalysis(env: RuntimeEnv, id: string) {

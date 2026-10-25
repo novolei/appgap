@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { chineseName, chineseOneLiner, chineseReview } from "./translate";
 
 describe("chineseName", () => {
+  it("preserves game titles when store copy contains tool keywords", () => {
+    expect(chineseName("MONOPOLY GO!", "6014", "Clean up rewards, cast dice, collect photos")).toBe("MONOPOLY GO!");
+    expect(chineseName("Clean Up Board Game", "6014")).toBe("Clean Up Board Game");
+    expect(chineseOneLiner({ name: "MONOPOLY GO!", description: "Clean up rewards", genreId: "6014" })).not.toMatch(/手机|清理|工具/);
+  });
   it("translates Japanese QR scanner names", () => {
     expect(chineseName("QRコード & バーコードスキャナーアプリ")).toContain("二维码");
   });

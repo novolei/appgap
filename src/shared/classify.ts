@@ -294,7 +294,7 @@ export function classifyOpportunities(input: {
 
   const clusterBuckets = new Map<string, OpportunityRow[]>();
   for (const row of result.filter((item) => item.lens === "paid_tools")) {
-    const kind = detectKind(row.name, apps.get(row.appId)?.description ?? "");
+    const kind = detectKind(row.name, apps.get(row.appId)?.description ?? "", row.genreId);
     if (!kind) continue;
     const list = clusterBuckets.get(kind.id) ?? [];
     list.push(row);
@@ -302,7 +302,7 @@ export function classifyOpportunities(input: {
   }
   for (const [kindId, list] of clusterBuckets) {
     if (list.length < 4) continue;
-    const kind = detectKind(list[0].name, apps.get(list[0].appId)?.description ?? "");
+    const kind = detectKind(list[0].name, apps.get(list[0].appId)?.description ?? "", list[0].genreId);
     for (const row of list) {
       result.push({
         ...row,

@@ -9,7 +9,7 @@ export async function runDeepseekAnalysis(env: EnvAi, detail: AppDetail): Promis
   if (!key) throw new Error("未配置 DEEPSEEK_API_KEY");
   const reviews = detail.reviews
     .slice(0, 8)
-    .map((item) => `${item.rating ?? "?"}星 ${item.title} ${item.content}`.slice(0, 180))
+    .map((item) => `${item.rating ?? "?"}星 ${item.titleOriginal || item.title} ${item.contentOriginal || item.content}`.slice(0, 180))
     .join("\n");
   const positions = detail.positions
     .slice(0, 8)
@@ -21,6 +21,7 @@ App 原名：${detail.app.name}
 中文：${detail.app.nameZh}
 开发者：${detail.app.artistName}
 一句话：${detail.app.oneLiner}
+商店介绍（节选）：${detail.app.description?.slice(0, 3000) || "未知"}
 价格：${detail.app.formattedPrice ?? "未知"}
 榜单：${positions || "未知"}
 现有判断：${detail.analysis.headline}
@@ -35,7 +36,7 @@ ${reviews || "（没有评价）"}
 ## 用户在骂什么
 ## 可以做什么替代
 ## 风险与注意
-每段 3–6 句，具体、可执行。`;
+每段 3–6 句，具体、可执行。游戏要分析玩法、核心循环和付费方式，不套用工具应用模板；未知内容写明未知，不能将免费榜或内购收入视为付费下载。`;
 
   return generateAnalysis(env, user);
 }

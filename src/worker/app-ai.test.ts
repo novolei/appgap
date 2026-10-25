@@ -13,14 +13,16 @@ it("shares per-app output, ignores forced refresh, merges concurrency and invali
     INSERT INTO opportunities(lens,app_id,score,country,chart,genre_id,rank) VALUES('paid_games','42',50,'us','grossing','6014',1);
     INSERT INTO app_reviews(app_id,country,rating,title,content,fetched_at) VALUES('42','us',3,'fixture','test controls','${stamp}');
     INSERT INTO ingest_runs(started_at,finished_at,status) VALUES('${stamp}','${stamp}','success');`);
+  await db.prepare("INSERT INTO ai_analyses(app_id,markdown,created_at) VALUES(?,?,?)").bind("42", "Legacy incorrectly classified phone cleaner", stamp).run();
   const env: RuntimeEnv = { DB: db, SITE_PASSWORD: "fixture-password", DEEPSEEK_API_KEY: "fixture-key" };
   const cookie = (await loginResponse(env.SITE_PASSWORD!, env, new Request("https://appgap.test"))).headers.get("set-cookie")!.split(";")[0];
-  const upstream = vi.fn(async () => Response.json({ choices: [{ finish_reason: "stop", message: { content: "## 事实\nFixture result" } }] }));
+  const upstream = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ choices: [{ finish_reason: "stop", message: { content: "## 事实\nFixture result" } }] }));
   vi.stubGlobal("fetch", upstream);
   const call = (path: string, method = "POST") => worker.fetch(new Request("https://appgap.test" + path, { method, headers: { cookie } }), env, {} as ExecutionContext);
   const responses = await Promise.all([call("/api/apps/42/analyze"), call("/api/apps/42/analyze?fresh=1")]);
   expect(responses.map((r) => r.status)).toEqual([200, 200]);
   expect(upstream).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(upstream.mock.calls[0][1]!.body as string).messages[1].content).toContain("Fixture Game");
   expect(await (await call("/api/apps/42/analyze?fresh=1")).json()).toMatchObject({ cached: true });
   const detail = await (await call("/api/apps/42", "GET")).json() as { ai: { cached: boolean; stale: boolean } };
   expect(detail.ai).toMatchObject({ cached: true, stale: false });

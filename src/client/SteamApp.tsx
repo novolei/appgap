@@ -282,7 +282,7 @@ export function SteamApp() {
           </span>
         </div>
       </header>
-      <p className="steam-footnote"><a href="/research/steam-opportunities-2026-10-25.html" target="_blank" rel="noreferrer">2026-10-25 综合研究与原型建议 ↗</a> · <a href="/research/steam-analysis-2026-10-25.html" target="_blank" rel="noreferrer">复算笔记预览</a> · <a href="/research/steam-analysis-2026-10-25.ipynb" download>下载 Notebook</a></p>
+      <p className="steam-footnote"><a href="/research/steam-opportunities-2026-10-25.html" target="_blank" rel="noreferrer">2026-10-25 首批冻结研究（430 款）↗</a> · <a href="/research/steam-analysis-2026-10-25.html" target="_blank" rel="noreferrer">复算笔记预览</a> · <a href="/research/steam-analysis-2026-10-25.ipynb" download>下载 Notebook</a></p>
       <div className="steam-caution">
         研究范围是公开榜单入样游戏，覆盖头部需求；无法代表 Steam
         全量市场。畅销含内购，免费榜不等于下载榜；地区指榜单，评论样本来自全球。

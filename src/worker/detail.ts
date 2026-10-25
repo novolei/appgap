@@ -57,6 +57,7 @@ export async function loadAppDetail(env: DataEnv, id: string): Promise<AppDetail
     .all<{ date: string; country: string; chart: string; genreId: string; rank: number }>();
 
   const country = opp?.country || positions.results?.[0]?.country || "us";
+  const genreId = opp?.genre_id || positions.results?.[0]?.genreId || "6002";
   const stored = await env.DB.prepare(
     `SELECT rating, title, content, author FROM app_reviews
      WHERE app_id = ? AND country = ?
@@ -72,8 +73,8 @@ export async function loadAppDetail(env: DataEnv, id: string): Promise<AppDetail
       rating: row.rating,
       title: titleZh || row.title,
       content: contentZh || row.content,
-      titleOriginal: hasForeignScript(row.title) ? row.title : null,
-      contentOriginal: hasForeignScript(row.content) ? row.content : null,
+      titleOriginal: titleZh !== row.title || hasForeignScript(row.title) ? row.title : null,
+      contentOriginal: contentZh !== row.content || hasForeignScript(row.content) ? row.content : null,
       author: row.author,
       updated: null,
     };
@@ -96,7 +97,7 @@ export async function loadAppDetail(env: DataEnv, id: string): Promise<AppDetail
     name: appRow.name,
     country,
     rank: opp?.rank || positions.results?.[0]?.rank || 0,
-    genreId: opp?.genre_id || positions.results?.[0]?.genreId || "6002",
+    genreId,
     rating: opp?.rating ?? null,
     ratingCount: opp?.rating_count ?? null,
     reviews,
@@ -106,7 +107,7 @@ export async function loadAppDetail(env: DataEnv, id: string): Promise<AppDetail
     app: {
       id: appRow.id,
       name: appRow.name,
-      nameZh: chineseName(appRow.name, opp?.genre_id, appRow.description),
+      nameZh: chineseName(appRow.name, genreId, appRow.description),
       artistName: appRow.artist_name,
       artistId: appRow.artist_id,
       iconUrl: appRow.icon_url,
@@ -115,7 +116,7 @@ export async function loadAppDetail(env: DataEnv, id: string): Promise<AppDetail
         name: appRow.name,
         oneLiner: appRow.one_liner,
         description: appRow.description,
-        genreId: opp?.genre_id,
+        genreId,
         country,
         rank: opp?.rank,
       }),

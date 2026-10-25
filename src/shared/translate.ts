@@ -1,5 +1,5 @@
 import { countryName } from "./catalog";
-import { describeApp } from "./what";
+import { describeApp, isGameGenre } from "./what";
 
 const NAME_GLOSSARY: Array<[RegExp, string]> = [
   [/qr\s*code/gi, "二维码"],
@@ -138,7 +138,8 @@ function hanCount(text: string): number {
 }
 
 export function chineseName(name: string, genreId?: string | null, description?: string | null): string {
-  const described = describeApp(name, description);
+  if (isGameGenre(genreId)) return name;
+  const described = describeApp(name, description, genreId);
   if (described.kindId) return described.nameZh;
   const cleaned = applyPairs(name, NAME_GLOSSARY).replace(/[()（）[\]{}]/g, " ").replace(/\s{2,}/g, " ").trim();
   if (cleaned && !hasForeignScript(cleaned) && hanCount(cleaned) >= 2 && hanCount(cleaned) >= latinCount(cleaned)) {
@@ -157,7 +158,7 @@ export function chineseOneLiner(input: {
   country?: string | null;
   rank?: number | null;
 }): string {
-  const described = describeApp(input.name, input.description ?? input.oneLiner);
+  const described = describeApp(input.name, input.description ?? input.oneLiner, input.genreId);
   const bits = [described.what];
   if (input.rank === 1 && input.country) bits.push(`${countryName(input.country)}畅销第一`);
   else if (input.rank === 2 && input.country) bits.push(`${countryName(input.country)}畅销第二`);

@@ -1,6 +1,7 @@
 import { countryName, genreLabel } from "./catalog";
 import type { AppDetail, ReviewItem } from "./types";
 import { chineseName } from "./translate";
+import { isGameGenre } from "./what";
 
 const PAIN_RULES: Array<{ re: RegExp; label: string }> = [
   { re: /订阅|訂閱|課金|subscription|charge|billing|cancel|退订|引き落|課金される/i, label: "订阅 / 扣费不透明" },
@@ -43,10 +44,12 @@ export function analyzeApp(input: {
   if (painList.length) {
     bullets.push(`差评里反复出现：${painList.join("、")}。`);
   } else if (input.reviews.some((item) => item.rating != null && item.rating <= 2)) {
-    bullets.push("最近差评不少，槽点比较散，下面附了中文译文和原文。");
+    bullets.push("已采到低分评价，样本有限；下面附了关键词整理和原文。");
   }
   const move =
-    painList.includes("订阅 / 扣费不透明") || painList.includes("被骂成诈骗 / 诱导付费")
+    isGameGenre(input.genreId)
+      ? "先围绕一项可验证的玩法差异做小型原型，核对付费方式、核心循环与玩家原文；竞品痛点不能证明玩家会迁移。"
+      : painList.includes("订阅 / 扣费不透明") || painList.includes("被骂成诈骗 / 诱导付费")
       ? "可以做功能同样直接、但不靠订阅陷阱赚钱的同类工具。取消订阅、定价和核心成功率先做明白。"
       : "可以做更干净的同类工具：核心功能更稳，话术更老实，收费更清楚。";
 

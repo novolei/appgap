@@ -34,13 +34,20 @@ export const APP_KINDS: AppKind[] = [
   { id: "sports-game", nameZh: "体育游戏", what: "球类或赛事手游", re: /soccer|football|baseball|野球|篮球|fifa|mlb|nba/i },
 ];
 
-export function detectKind(name: string, description = ""): AppKind | null {
+export function isGameGenre(genreId?: string | null): boolean {
+  return genreId === "6014";
+}
+const GAME_KINDS = new Set(["moba", "gacha", "puzzle", "idle", "sports-game"]);
+
+export function detectKind(name: string, description = "", genreId?: string | null): AppKind | null {
   const hay = `${name}\n${description.slice(0, 400)}`;
-  return APP_KINDS.find((item) => item.re.test(name)) ?? APP_KINDS.find((item) => item.re.test(hay)) ?? null;
+  const kinds = isGameGenre(genreId) ? APP_KINDS.filter((item) => GAME_KINDS.has(item.id)) : APP_KINDS;
+  return kinds.find((item) => item.re.test(name)) ?? kinds.find((item) => item.re.test(hay)) ?? null;
 }
 
-export function describeApp(name: string, description?: string | null): { nameZh: string; what: string; kindId: string | null } {
-  const kind = detectKind(name, description ?? "");
+export function describeApp(name: string, description?: string | null, genreId?: string | null): { nameZh: string; what: string; kindId: string | null } {
+  const kind = detectKind(name, description ?? "", genreId);
+  if (isGameGenre(genreId)) return { nameZh: name, what: kind?.what || "游戏，玩法以商店介绍为准", kindId: kind?.id || null };
   if (kind) return { nameZh: kind.nameZh, what: kind.what, kindId: kind.id };
   const desc = (description ?? "").replace(/\s+/g, " ").trim();
   if (/[\u4e00-\u9fff]/.test(desc)) {

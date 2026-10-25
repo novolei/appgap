@@ -15,7 +15,7 @@ export function buildOneLiner(input: {
   genreId?: string | null;
 }): string {
   const description = input.description ?? "";
-  const described = describeApp(input.name, description);
+  const described = describeApp(input.name, description, input.genreId);
   const bits: string[] = [described.what];
   if (detectSubscription(description) && /二维码|清理/.test(described.what)) {
     bits[0] = `${described.what}，靠订阅收费`;
