@@ -1,0 +1,22 @@
+[Unit]
+Description=AppGap dedicated Cloudflare Tunnel
+After=network-online.target appgap.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=appgap-tunnel
+Group=appgap-tunnel
+LoadCredential=tunnel-token:/etc/appgap-tunnel.token
+ExecStart=/opt/appgap/runtime/cloudflared tunnel --no-autoupdate --protocol http2 --edge-ip-version 4 run --token-file %d/tunnel-token
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryMax=192M
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

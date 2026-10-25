@@ -11,7 +11,7 @@ Node 24.19.0；`pnpm install --frozen-lockfile`、`pnpm test`、`pnpm build:serv
 - `/opt/appgap/runtime/node/`：隔离安装的官方 Node 二进制，下载时校对官方 SHA256，不替换系统 Node。
 - `/opt/appgap/releases/<commit>/`、`current`、`previous`：只读应用版本，健康检查失败恢复原链接。
 - `/var/lib/appgap/appgap.sqlite`：新站独立数据库，由版本化 SQL 自动迁移；owner appgap，目录 0700。切换旧应用前必须先核对迁移兼容性，当前迁移均为新增表 / 索引。
-- `/etc/appgap.env`：root 0600；站点口令仅在此，最少 16 字符；DeepSeek Key 可选，不进入前端或日志。首次 bootstrap 随机生成口令，不显示值。
+- `/etc/appgap.env`：root 0600；站点口令仅在此，最少 10 字符；DeepSeek Key 可选，不进入前端或日志。首次 bootstrap 随机生成口令，不显示值。
 - `appgap.service`：仅 `127.0.0.1:8790`，非 root、受限文件写入、384 MiB 上限。
 - `appgap-ingest.timer`：每周一香港时间 08:30；可用 `systemctl start --no-block appgap-ingest.service` 人工触发。任务最多 55 分钟，数据库锁 60 分钟后过期；不要并发手工绕过。
 - `appgap-backup.timer`：每天香港时间 03:20；在线一致性备份到 `/var/backups/appgap/`，保留 30 天。独立于已有 Mini Tanks 备份，当前不冒充异地容灾。

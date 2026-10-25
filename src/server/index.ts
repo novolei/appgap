@@ -25,7 +25,7 @@ if (process.argv.includes("--ingest")) {
     console.log("backup complete");
   } finally { db.close(); }
 } else {
-  if (!process.env.SITE_PASSWORD || process.env.SITE_PASSWORD.length < 16) throw new Error("SITE_PASSWORD of at least 16 characters required");
+  if (!process.env.SITE_PASSWORD || process.env.SITE_PASSWORD.length < 10) throw new Error("SITE_PASSWORD of at least 10 characters required");
   const origin = process.env.PUBLIC_ORIGIN || "http://127.0.0.1:8790";
   const assets = new Hono();
   assets.use("*", serveStatic({ root: "./dist" }));
