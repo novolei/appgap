@@ -13,3 +13,5 @@ data
 .vite
 coverage
 output
+__pycache__/
+*.pyc

@@ -59,7 +59,7 @@ function writeHash(lens: LensId | PoolId, appId: string | null, q: string, count
   window.location.hash = params.toString();
 }
 
-function Markdown({ text }: { text: string }) {
+export function Markdown({ text }: { text: string }) {
   const blocks = text.replace(/\r\n/g, "\n").trim().split(/\n{2,}/);
   return (
     <div className="md">
@@ -313,6 +313,7 @@ export function App() {
       <header className="hero">
         <div>
           <h1>AppGap</h1>
+          <a href="/steam">Steam 游戏机会研究 →</a>
           <p>
             每周扫一次各国畅销榜，用来发现能做的小工具和游戏需求。点进 App 可以加入候选收藏，确认了再立项。名单存在线上。
             <button className="source-link" type="button" onClick={() => setShowSource(true)}>

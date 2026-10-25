@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import sys
 import time
+import threading
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -44,7 +45,7 @@ def normalize_game(item, tag_names):
             "platforms": item.get("platforms", {}), "url": f"{STORE}/app/{app_id}/", "image": "https://shared.fastly.steamstatic.com/store_item_assets/"+image if image else None}
 
 
-def collect(directory):
+def collect(directory, resume_run=None):
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     database = sqlite3.connect(directory/"history.sqlite", timeout=10)
     database.executescript("""PRAGMA journal_mode=WAL;
@@ -54,6 +55,14 @@ def collect(directory):
       CREATE TABLE IF NOT EXISTS catalog (app_id TEXT PRIMARY KEY, payload TEXT, updated_at TEXT);
     """)
     now = datetime.now(timezone.utc)
+    cache_dir = None
+    if resume_run is not None:
+        previous = database.execute("SELECT started_at,status FROM runs WHERE id=?", (resume_run,)).fetchone()
+        if not previous or previous[1] == 'success':
+            raise ValueError("resume requires an interrupted or failed run")
+        now = datetime.fromisoformat(previous[0])
+        cache_dir = directory/'raw'/str(resume_run)
+        database.execute("UPDATE runs SET status='error',error='interrupted; resumed from cached source responses' WHERE id=?", (resume_run,))
     database.execute("UPDATE runs SET status='error',error='expired after two hours' WHERE status='running' AND started_at < ?", ((now-timedelta(hours=2)).isoformat(),))
     try:
         run_id = database.execute("INSERT INTO runs(started_at,status) VALUES (?,'running')", (now.isoformat(),)).lastrowid
@@ -61,7 +70,7 @@ def collect(directory):
     except sqlite3.IntegrityError:
         raise SystemExit("Steam ingest already running")
     raw_dir = directory/"raw"/str(run_id)
-    source = Sources(raw_dir)
+    source = Sources(raw_dir, cache_dir=cache_dir) if cache_dir else Sources(raw_dir)
 
     def progress(phase, **counts):
         status = {"runId": run_id, "status": "running", "startedAt": now.isoformat(), "phase": phase, **counts}
@@ -127,17 +136,29 @@ def collect(directory):
         review_start = int((now-timedelta(days=30)).timestamp())
         review_end = int(now.timestamp())
         progress("bounded 30-day review samples", games=len(games), reviewTargets=len(targets))
+        review_failures = 0
+        failure_lock = threading.Lock()
+        review_unavailable = threading.Event()
 
         def reviews(game):
+            nonlocal review_failures
             app_id = game["appId"]
+            if review_unavailable.is_set():
+                return app_id, None, "review source paused after repeated transport failures; retry on next run"
             body = {"appid": int(app_id), "languages": ["all"], "filter": 1, "purchase_type": 1, "num_per_page": 100, "filter_offtopic_activity": True, "date_range_start": review_start, "date_range_end": review_end}
             try:
                 all_page = source.api("IUserReviewsService/GetAppReviews", {**body, "review_type": 0}, "reviews-all-"+app_id)
                 negative_page = source.api("IUserReviewsService/GetAppReviews", {**body, "review_type": 2, "num_per_page": 50}, "reviews-negative-"+app_id)
                 if any(not review_start <= row.get("timestamp_created", 0) <= review_end for page in (all_page, negative_page) for row in page.get("reviews", [])):
                     raise ValueError("review timestamps outside the requested 30-day window")
+                with failure_lock:
+                    review_failures = 0
                 return app_id, review_evidence(app_id, all_page, negative_page), None
             except Exception as error:
+                with failure_lock:
+                    review_failures += 1
+                    if review_failures >= 3:
+                        review_unavailable.set()
                 return app_id, None, str(error)[:200]
 
         review_ok = 0
@@ -178,5 +199,10 @@ def collect(directory):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--directory", type=pathlib.Path, default=pathlib.Path("/var/lib/appgap/steam"))
+    parser.add_argument("--resume-run", type=int)
     args = parser.parse_args()
-    collect(args.directory)
+    import fcntl
+    args.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (args.directory/'collector.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        collect(args.directory, args.resume_run)

@@ -14,7 +14,18 @@ PAINS = [
     ("localization", "本地化与可读性", r"locali[sz]|translat|language|font size|text size|翻译|汉化|中文|字体|日本語|перевод|локализа"),
     ("balance", "平衡与公平", r"unbalanc|balance|difficulty spike|rng|平衡|数值|难度|随机|バランス|баланс"),
 ]
-COMPILED_PAINS = [(key, label, re.compile(pattern, re.I)) for key, label, pattern in PAINS]
+EXTRA_LANGUAGES = {
+    "performance": r"absturz|ruckel|plantage|saccad|bajones|rendimiento|travamento|desempenho|최적화|프레임|튕|çökme|wydajność",
+    "onboarding": r"anleitung|einsteiger|didacticiel|tutoriel|aprendizaje|aprendizado|튜토리얼|초보|samouczek",
+    "controls": r"steuerung|tastenbelegung|manette|commandes|controles|comandos|조작|컨트롤러|sterowanie",
+    "content": r"langweilig|wiederhol|ennuyeux|répétitif|aburrid|repetitivo|entediante|반복|콘텐츠|powtarzal",
+    "monetization": r"überteuert|mikrotransaktion|trop cher|microtransaction|caro demais|abusiv|과금|현질|mikropłatno",
+    "multiplayer": r"verbindung|verbindungsabbruch|triche|serveur|servidor|emparejamiento|매칭|서버|핵쟁이|łączeni",
+    "save": r"spielstand|sauvegarde|partida guardada|salvamento|저장|세이브|zapis gry",
+    "localization": r"übersetzung|traduction|traducción|tradução|번역|한글|tłumaczen",
+    "balance": r"schwierigkeits|équilibr|equilibrio|balanceamento|밸런스|난이도|zbalans",
+}
+COMPILED_PAINS = [(key, label, re.compile(pattern+"|"+EXTRA_LANGUAGES[key], re.I)) for key, label, pattern in PAINS]
 HIGH_SCOPE = {"MMORPG", "Massively Multiplayer", "Open World", "Battle Royale"}
 FOCUSED = {"Puzzle", "Roguelike", "Roguelite", "Deckbuilding", "Turn-Based Strategy", "Cozy", "Management", "Automation", "Precision Platformer", "Hidden Object", "Cooking", "Fishing"}
 
@@ -52,6 +63,7 @@ def review_evidence(app_id, all_page, negative_page):
     return {"allSampleN": n, "negativeInAllSample": negative_n, "negativeWilson95": interval,
             "matching30Days": all_page.get("total_matching"), "negativeMatching30Days": negative_page.get("total_matching"),
             "negativeSampleN": len(evidence), "languages": dict(Counter(row.get("language", "unknown") for row in all_reviews)),
+            "purchase": {"steam": sum(bool(row.get("steam_purchase")) for row in all_reviews), "external": sum(not row.get("steam_purchase") for row in all_reviews), "receivedFree": sum(bool(row.get("received_for_free")) for row in all_reviews), "refunded": sum(bool(row.get("refunded")) for row in all_reviews)},
             "firstTimestamp": min((r.get("timestamp_created", 0) for r in all_reviews), default=None),
             "lastTimestamp": max((r.get("timestamp_created", 0) for r in all_reviews), default=None),
             "topics": [{"id": key, "label": label, "hits": counts[key], "denominator": len(evidence)} for key, label, _ in PAINS if counts[key]],

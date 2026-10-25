@@ -1,0 +1,413 @@
+.steam-page {
+  width: min(1420px, calc(100% - 64px));
+  margin: auto;
+  padding: 42px 0 60px;
+}
+.steam-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  align-items: end;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 26px;
+}
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.13em;
+  color: var(--accent);
+  font-weight: 700;
+}
+.steam-hero h1 {
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 42px;
+  font-weight: 600;
+  margin: 12px 0;
+}
+.steam-hero p {
+  color: var(--muted);
+  margin: 0;
+}
+.steam-stamp {
+  display: grid;
+  gap: 5px;
+  text-align: right;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.steam-stamp strong {
+  color: var(--ink);
+}
+.steam-caution {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.steam-filters {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr 1.3fr 1fr;
+  gap: 16px;
+  margin: 24px 0;
+}
+.steam-filters label,
+.steam-list-tools label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.steam-page select,
+.steam-list-tools input {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid #ccc3b3;
+  border-radius: 3px;
+  padding: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.steam-page button {
+  cursor: pointer;
+  font: inherit;
+  background: var(--paper);
+  border: 1px solid #cfc5b5;
+  border-radius: 3px;
+  color: var(--ink);
+  padding: 7px 11px;
+}
+.steam-page button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.steam-page button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.steam-page :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.steam-stats {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 20px 0;
+  gap: 20px;
+}
+.steam-stats > div {
+  display: grid;
+  gap: 4px;
+}
+.steam-stats span,
+.steam-stats small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.steam-stats strong {
+  font-size: 28px;
+  font-family: Georgia, serif;
+  font-weight: 500;
+}
+.steam-tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 25px 0;
+}
+.steam-tabs button {
+  border-color: transparent;
+  background: transparent;
+}
+.steam-tabs .active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.steam-tabs > span {
+  flex: 1;
+}
+.steam-tabs a {
+  font-size: 12px;
+  padding: 8px;
+}
+.steam-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.steam-section-heading h2 {
+  margin: 4px 0;
+  font-size: 24px;
+}
+.steam-section-heading p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.steam-section-heading > button {
+  white-space: nowrap;
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.steam-footnote {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.steam-window-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin: 20px 0;
+}
+.steam-window {
+  background: var(--paper);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--ink);
+}
+.steam-window-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.steam-window-top b {
+  font-size: 26px;
+  color: var(--accent);
+  font-family: Georgia, serif;
+}
+.steam-window-top small {
+  font: 11px sans-serif;
+  color: var(--muted);
+}
+.steam-window h3 {
+  font-size: 21px;
+  margin: 13px 0;
+}
+.steam-window p {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.steam-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.steam-chips span {
+  background: var(--chip);
+  font-size: 11px;
+  padding: 4px 7px;
+  border-radius: 2px;
+}
+.steam-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 15px 0;
+}
+.steam-examples button {
+  font-size: 11px;
+  padding: 4px 6px;
+  text-align: left;
+}
+.steam-window details {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  font-size: 12px;
+}
+.steam-window summary {
+  cursor: pointer;
+}
+.steam-table-wrap {
+  overflow: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  margin: 20px 0;
+}
+.steam-page table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  text-align: left;
+}
+.steam-page th,
+.steam-page td {
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  min-width: 85px;
+}
+.steam-page thead th {
+  background: #eae3d7;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.steam-page th small,
+.steam-page td small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 5px;
+}
+.steam-page tbody th {
+  font-weight: 500;
+}
+.steam-page caption {
+  padding: 14px;
+  text-align: left;
+  color: var(--muted);
+  font-size: 12px;
+}
+.steam-page .steam-game-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  text-align: left;
+  font-weight: 600;
+}
+.steam-heat {
+  background: #dce8d9;
+}
+.steam-list-tools {
+  display: flex;
+  gap: 16px;
+}
+.steam-list-tools input {
+  min-width: 260px;
+}
+.steam-error,
+.steam-notice {
+  padding: 12px;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+}
+.steam-notice button {
+  float: right;
+  padding: 0 7px;
+}
+.steam-footer {
+  border-top: 1px solid var(--line);
+  margin-top: 40px;
+  padding: 20px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.steam-ai {
+  background: var(--paper);
+  padding: 28px;
+  border: 1px solid var(--line);
+}
+.steam-overlay {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  margin: 0;
+  position: fixed;
+  inset: 0;
+  background: #1c191599;
+  z-index: 100;
+  overflow: auto;
+  padding: 30px;
+}
+.steam-detail {
+  max-width: 1000px;
+  background: var(--paper);
+  margin: auto;
+  padding: 35px;
+  position: relative;
+}
+.steam-detail h2 {
+  font-size: 28px;
+  padding-right: 100px;
+}
+.steam-detail p {
+  line-height: 1.8;
+  font-size: 14px;
+}
+.steam-detail h3 {
+  margin-top: 30px;
+}
+.steam-close {
+  position: sticky;
+  top: 10px;
+  float: right;
+  z-index: 2;
+}
+.steam-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+.steam-detail blockquote {
+  margin: 14px 0;
+  padding: 8px 15px;
+  border-left: 2px solid var(--accent);
+  background: var(--bg);
+}
+.steam-detail blockquote small {
+  font-size: 11px;
+  color: var(--muted);
+}
+@media (max-width: 1100px) {
+  .steam-window-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .steam-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .steam-page {
+    width: calc(100% - 28px);
+    padding-top: 24px;
+  }
+  .steam-hero {
+    display: block;
+  }
+  .steam-hero h1 {
+    font-size: 32px;
+  }
+  .steam-stamp {
+    text-align: left;
+    margin-top: 20px;
+  }
+  .steam-filters {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .steam-stats {
+    gap: 15px;
+  }
+  .steam-stats strong {
+    font-size: 23px;
+  }
+  .steam-window-grid {
+    grid-template-columns: 1fr;
+  }
+  .steam-section-heading {
+    display: block;
+  }
+  .steam-list-tools {
+    display: grid;
+  }
+  .steam-overlay {
+    padding: 8px;
+  }
+  .steam-detail {
+    padding: 20px;
+  }
+  .steam-tabs > span {
+    display: none;
+  }
+}

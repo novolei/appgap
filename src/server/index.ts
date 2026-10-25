@@ -9,6 +9,7 @@ import worker from "../index";
 import { runIngest } from "../worker/ingest";
 import type { RuntimeEnv } from "../worker/env";
 import { SqliteDatabase } from "./database";
+import { steamRoutes } from "./steam";
 
 const path = process.env.APPGAP_DB || "data/appgap.sqlite";
 mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -46,6 +47,7 @@ if (process.argv.includes("--ingest")) {
     c.header("X-Robots-Tag", "noindex, nofollow");
     await next();
   });
+  http.route("/api/steam", steamRoutes(env, process.env.STEAM_DATA_DIR || `${dirname(path)}/steam`, origin));
   http.all("*", async (c) => {
     const url = new URL(c.req.url);
     const expected = new URL(origin);

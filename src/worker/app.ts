@@ -291,6 +291,7 @@ app.get("/api/pools", async (context) => {
   const watch: string[] = [];
   const build: string[] = [];
   for (const row of rows.results ?? []) {
+    if (row.appId.startsWith("steam:") !== (context.req.query("platform") === "steam")) continue;
     if (row.pool === "build") build.push(row.appId);
     else watch.push(row.appId);
   }
@@ -299,7 +300,7 @@ app.get("/api/pools", async (context) => {
 
 app.post("/api/pools", async (context) => {
   const body: unknown = await context.req.json().catch(() => null);
-  if (!body || typeof body !== "object" || !("appId" in body) || typeof body.appId !== "string" || !/^\d{1,20}$/.test(body.appId) || !("pool" in body)) return context.json({ error: "invalid pool request" }, 400);
+  if (!body || typeof body !== "object" || !("appId" in body) || typeof body.appId !== "string" || !/^(steam:)?\d{1,20}$/.test(body.appId) || !("pool" in body)) return context.json({ error: "invalid pool request" }, 400);
   const appId = body.appId;
   if (body.pool === null) {
     await context.env.DB.prepare("DELETE FROM pools WHERE app_id = ?").bind(appId).run();

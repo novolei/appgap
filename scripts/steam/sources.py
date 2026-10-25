@@ -1,6 +1,7 @@
 """Read public Steam sources. No account, publisher key, cookie or private endpoint."""
 import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -14,22 +15,32 @@ API = "https://api.steampowered.com"
 
 
 class Sources:
-    def __init__(self, raw_dir):
+    def __init__(self, raw_dir, cache_dir=None):
         self.raw_dir = raw_dir
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.receipts = []
         self.lock = threading.Lock()
         self.next_at = 0.0
+        self.cache_dir = cache_dir
 
     def get(self, url, label, as_json=True):
+        filename = label + (".json" if as_json else ".html")
+        cached = self.cache_dir/filename if self.cache_dir else None
+        if cached and cached.is_file():
+            raw = cached.read_bytes()
+            result = json.loads(raw) if as_json else raw.decode("utf-8")
+            self.raw_dir.joinpath(filename).write_bytes(raw)
+            os.utime(self.raw_dir/filename, (cached.stat().st_atime, cached.stat().st_mtime))
+            self.receipts.append({"label": label, "url": url, "fetchedAt": datetime.fromtimestamp(cached.stat().st_mtime, timezone.utc).isoformat(), "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw), "reused": True})
+            return result
         for attempt in range(4):
             with self.lock:
                 start = max(time.monotonic(), self.next_at)
-                self.next_at = start + 0.5
+                self.next_at = start + 2.0
             time.sleep(max(0, start - time.monotonic()))
             try:
                 request = urllib.request.Request(url, headers={"User-Agent": "AppGap/0.2 (personal game-market research)", "Accept": "application/json, text/html;q=0.9"})
-                with urllib.request.urlopen(request, timeout=25) as response:
+                with urllib.request.urlopen(request, timeout=15) as response:
                     if urllib.parse.urlparse(response.url).path != urllib.parse.urlparse(url).path:
                         raise ValueError("unexpected redirect: " + label)
                     raw = response.read(12 * 1024 * 1024 + 1)

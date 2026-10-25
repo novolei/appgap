@@ -14,6 +14,12 @@ beforeEach(async () => {
 afterEach(() => db.close());
 function call(path: string, init?: RequestInit) { return worker.fetch(new Request("https://appgap.test" + path, { ...init, headers: { cookie, ...init?.headers } }), env, {} as ExecutionContext); }
 
+it("keeps Steam and App Store saved pools separate despite overlapping numeric IDs", async () => {
+  for (const appId of ["123", "steam:123"]) expect((await call("/api/pools", {method:"POST",body:JSON.stringify({appId,pool:"watch"})})).status).toBe(200);
+  expect(await (await call("/api/pools")).json()).toEqual({watch:["123"],build:[]});
+  expect(await (await call("/api/pools?platform=steam")).json()).toEqual({watch:["steam:123"],build:[]});
+});
+
 it("rejects malformed pool inputs without clearing saved data", async () => {
   await db.prepare("INSERT INTO pools VALUES ('123', 'build', 'now')").run();
   for (const body of [{ appId: 123, pool: "watch" }, { appId: "123" }, { appId: "123", pool: false }, { appId: "123", pool: "bad" }]) {

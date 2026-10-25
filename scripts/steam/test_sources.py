@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from analysis import review_evidence, score_game
 from collect import collect
-from sources import parse_chart
+from sources import parse_chart, Sources
 
 
 def chart_html(country="GLOBAL", duplicate=False):
@@ -23,6 +23,19 @@ def chart_html(country="GLOBAL", duplicate=False):
 
 
 class SourceChecks(unittest.TestCase):
+    def test_resumption_reuses_raw_bytes_without_network_or_new_timestamp(self):
+        with tempfile.TemporaryDirectory(prefix="appgap-steam-cache-") as path:
+            root = Path(path)
+            cache = root/'old'
+            cache.mkdir()
+            (cache/'reviews-all-5.json').write_text('{"response":{"reviews":[]}}')
+            stamp = (cache/'reviews-all-5.json').stat().st_mtime
+            source = Sources(root/'new', cache_dir=cache)
+            with patch('urllib.request.urlopen', side_effect=AssertionError('must not refetch')):
+                self.assertEqual(source.get('https://api.steampowered.com/test', 'reviews-all-5')['response']['reviews'], [])
+            self.assertEqual((root/'new'/'reviews-all-5.json').stat().st_mtime, stamp)
+            self.assertTrue(source.receipts[0]['reused'])
+
     def test_region_and_order_are_source_bound(self):
         rows, countries = parse_chart(chart_html("US"), "US")
         self.assertEqual((rows[0]["appId"], rows[0]["rank"], rows[0]["previousRank"]), ("1", 1, 1))
