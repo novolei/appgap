@@ -17,6 +17,7 @@ export type DataEnv = { DB: Database };
 export type RuntimeEnv = DataEnv & {
   SITE_PASSWORD?: string;
   DEEPSEEK_API_KEY?: string;
+  DEEPSEEK_MODEL?: string;
   INGEST_SECRET?: string;
   ALLOW_LOCAL_INGEST?: boolean;
   ASSETS?: Fetcher;

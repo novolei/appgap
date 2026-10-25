@@ -32,7 +32,7 @@ if (process.argv.includes("--ingest")) {
   assets.get("*", serveStatic({ path: "./dist/index.html" }));
   const env: RuntimeEnv = {
     DB: db, SITE_PASSWORD: process.env.SITE_PASSWORD,
-    INGEST_SECRET: process.env.INGEST_SECRET, DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+    INGEST_SECRET: process.env.INGEST_SECRET, DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY, DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL,
     ASSETS: { fetch: (request: Request) => assets.fetch(request) } as Fetcher,
   };
   const http = new Hono();
