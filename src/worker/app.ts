@@ -4,6 +4,7 @@ import type { OpportunityListResponse, OpportunityRow, RankPosition } from "../s
 import { chineseName, chineseOneLiner, localizeRegions } from "../shared/translate";
 import { readAppAnalysis, generateAppAnalysis } from "./app-ai";
 import { AnalysisError } from "./analysis-cache";
+import { rememberResearch } from "./research-history";
 import { loadAppDetail } from "./detail";
 import type { RuntimeEnv } from "./env";
 import { isActivelyIngesting } from "./ingestStatus";
@@ -249,7 +250,9 @@ app.get("/api/apps", async (context) => {
 app.get("/api/apps/:id", async (context) => {
   const detail = await loadAppDetail(context.env, context.req.param("id"));
   if (!detail) return context.json({ error: "not found" }, 404);
-  detail.ai = (await readAppAnalysis(context.env, context.req.param("id"))).analysis;
+  const cached=await readAppAnalysis(context.env, context.req.param("id"));
+  detail.ai = cached.analysis;
+  if(detail.ai && !detail.ai.stale)await rememberResearch(context.env,cached.identity.key,`App Store · ${detail.app.name}`);
   return context.json(detail);
 });
 
@@ -264,7 +267,9 @@ app.post("/api/apps/:id/analyze", async (context) => {
 });
 
 app.get("/api/pools", async (context) => {
-  const rows = await context.env.DB.prepare("SELECT app_id AS appId, pool FROM pools").all<{
+  const rows = await (context.env.ACCOUNTS_ACTIVE
+    ? context.env.DB.prepare("SELECT app_id AS appId,pool FROM user_pools WHERE user_id=?").bind(context.env.USER!.id)
+    : context.env.DB.prepare("SELECT app_id AS appId, pool FROM pools")).all<{
     appId: string;
     pool: PoolId;
   }>();
@@ -283,13 +288,16 @@ app.post("/api/pools", async (context) => {
   if (!body || typeof body !== "object" || !("appId" in body) || typeof body.appId !== "string" || !/^(steam:)?\d{1,20}$/.test(body.appId) || !("pool" in body)) return context.json({ error: "invalid pool request" }, 400);
   const appId = body.appId;
   if (body.pool === null) {
-    await context.env.DB.prepare("DELETE FROM pools WHERE app_id = ?").bind(appId).run();
+    if (context.env.ACCOUNTS_ACTIVE) await context.env.DB.prepare("DELETE FROM user_pools WHERE user_id=? AND app_id=?").bind(context.env.USER!.id,appId).run();
+    else await context.env.DB.prepare("DELETE FROM pools WHERE app_id = ?").bind(appId).run();
     return context.json({ ok: true });
   }
   if (body.pool !== "watch" && body.pool !== "build") {
     return context.json({ error: "bad pool" }, 400);
   }
-  await context.env.DB.prepare("INSERT OR REPLACE INTO pools (app_id, pool, created_at) VALUES (?, ?, ?)").bind(
+  if (context.env.ACCOUNTS_ACTIVE) await context.env.DB.prepare("INSERT OR REPLACE INTO user_pools(user_id,app_id,pool,created_at) VALUES(?,?,?,?)")
+    .bind(context.env.USER!.id,appId,body.pool,new Date().toISOString()).run();
+  else await context.env.DB.prepare("INSERT OR REPLACE INTO pools (app_id, pool, created_at) VALUES (?, ?, ?)").bind(
     appId,
     body.pool,
     new Date().toISOString(),

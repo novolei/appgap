@@ -1,4 +1,4 @@
-import { isAuthed, loginPage, loginResponse } from "./worker/auth";
+import { authenticatedUser, isAuthed, loginPage, loginResponse } from "./worker/auth";
 import app from "./worker/app";
 import type { RuntimeEnv } from "./worker/env";
 import { expireStaleIngest, isIngestLocked, runIngest } from "./worker/ingest";
@@ -42,12 +42,12 @@ export default {
       if (!(await canCallIngest(request, env, url))) return jsonError("unauthorized", 401);
       return app.fetch(request, env, ctx);
     }
-    const authed = await isAuthed(request, env);
-    if (!authed) {
+    const actor = await authenticatedUser(request, env);
+    if (!actor) {
       if (url.pathname.startsWith("/api/")) return jsonError("unauthorized", 401);
       return loginPage();
     }
-    const response = await app.fetch(request, env, ctx);
+    const response = await app.fetch(request, { ...env, USER: actor }, ctx);
     if (response.status === 404 && !url.pathname.startsWith("/api/") && env.ASSETS) {
       return env.ASSETS.fetch(request);
     }

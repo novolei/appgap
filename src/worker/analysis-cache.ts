@@ -34,7 +34,7 @@ export class AnalysisCache {
       VALUES(?,?,?,?,?,?,?,?,?)`).bind(identity.key, identity.scope, identity.owner, identity.visibility,
       identity.runId, identity.dataCapturedAt, createdAt, new Date(Date.parse(createdAt) + days * 86400000).toISOString(), markdown).run();
   }
-  async generate(identity: AnalysisIdentity, make: () => Promise<string>): Promise<AiAnalysis> {
+  async generate(identity: AnalysisIdentity, make: () => Promise<string>, requestOwner = identity.owner): Promise<AiAnalysis> {
     const existing = await this.read(identity);
     if (existing) return existing;
     const waiting = this.pending.get(identity.key);
@@ -52,7 +52,7 @@ export class AnalysisCache {
         call = await this.db.prepare(`INSERT INTO ai_call_ledger(day,owner_hash,status,created_at)
           SELECT ?,?,'running',? WHERE (SELECT COUNT(*) FROM ai_call_ledger WHERE day=?)<?
           AND (?='' OR (SELECT COUNT(*) FROM ai_call_ledger WHERE day=? AND owner_hash=?)<5)`)
-          .bind(this.day(), identity.owner, now, this.day(), this.dailyLimit, identity.owner, this.day(), identity.owner).run();
+          .bind(this.day(), requestOwner, now, this.day(), this.dailyLimit, requestOwner, this.day(), requestOwner).run();
       } catch (error) {
         if (error instanceof Error && error.message.includes("UNIQUE constraint")) throw new AnalysisError("已有研究正在生成，请稍后重试。");
         throw error;

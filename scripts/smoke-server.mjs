@@ -44,9 +44,9 @@ try {
   const base = `http://127.0.0.1:${port}`;
   assert.equal((await fetch(base+'/api/health')).status,200);
   assert.equal((await fetch(base+'/api/pools')).status,401);
-  assert.match(await (await fetch(base)).text(),/内部工具/);
+  assert.equal((await fetch(base,{redirect:'manual'})).status,302);
   for (const path of ['/research/steam-opportunities-2026-10-25.html','/research/steam-snapshot-2026-10-25.json.gz']) {
-    assert.match(await (await fetch(base+path)).text(),/内部工具/);
+    assert.match((await fetch(base+path,{redirect:'manual'})).headers.get('location'),/^\/login\?next=/);
   }
   const login = await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:'test-runtime-password'})});
   assert.equal(login.status,200);

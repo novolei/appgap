@@ -8,6 +8,7 @@ import { steamRoutes } from "./steam";
 import { SqliteDatabase } from "./database";
 import { loginResponse } from "../worker/auth";
 import { csvCell } from "../shared/steam-export";
+import { hash,ownerHash } from "./account-security";
 
 it("exports untrusted game titles without spreadsheet formulas", () => {
   expect(csvCell('=HYPERLINK("https://evil.test")')).toBe(
@@ -189,6 +190,20 @@ it("isolates custom research and custom text filters from other sessions and pub
   expect(await ask(first, "test", "")).toMatchObject({ visibility: "session", cached: false });
   expect((await (await app.request("https://appgap.test/analysis?tag=test", { headers: second })).json() as { analysis: unknown }).analysis).toBeNull();
   expect(upstream).toHaveBeenCalledTimes(3);
+});
+it("keeps private research stable across account sessions and separate from other accounts",async()=>{
+  const directory=mkdtempSync(join(tmpdir(),"appgap-steam-route-"));directories.push(directory);
+  writeFileSync(join(directory,"latest.json"),JSON.stringify(fixture));
+  const db=new SqliteDatabase(":memory:");databases.push(db);
+  for(const id of ["alpha","beta"])db.sqlite.prepare("INSERT INTO users(id,username,display_name,created_at) VALUES(?,?,?,'now')").run(id,id,id);
+  for(const [token,id] of [["a","alpha"],["b","alpha"],["c","beta"]])db.sqlite.prepare("INSERT INTO user_sessions VALUES(?,?,?,?)").run(hash(token.repeat(43)),id,"now","2099-01-01");
+  const env={DB:db,SITE_PASSWORD:"fixture-site-password",DEEPSEEK_API_KEY:"fixture-key",ACCOUNTS_ACTIVE:true};
+  const app=steamRoutes(env,directory,"https://appgap.test");
+  const upstream=vi.fn(async()=>Response.json({choices:[{finish_reason:"stop",message:{content:"private fixture analysis"}}]}));vi.stubGlobal("fetch",upstream);
+  const ask=async(token:string)=>(await app.request("https://appgap.test/analyze",{method:"POST",headers:{cookie:`appgap_user=${token.repeat(43)}`},body:JSON.stringify({question:"private fixture concept"})})).json();
+  expect(await ask("a")).toMatchObject({cached:false,visibility:"session"});expect(await ask("b")).toMatchObject({cached:true});expect(await ask("c")).toMatchObject({cached:false});expect(upstream).toHaveBeenCalledTimes(2);
+  expect(await db.prepare("SELECT count(*) AS n FROM research_history WHERE user_id='alpha'").first()).toEqual({n:1});
+  expect(await db.prepare("SELECT count(*) AS n FROM ai_call_ledger WHERE owner_hash=?").bind(ownerHash("alpha")).first()).toEqual({n:1});
 });
 it("protects snapshots and AI mutations, invalidates replaced cache, and tolerates first-run absence", async () => {
   const directory = mkdtempSync(join(tmpdir(), "appgap-steam-route-"));

@@ -3,7 +3,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname,join } from "node:path";
 import { backup } from "node:sqlite";
 import worker from "../index";
 import { runIngest } from "../worker/ingest";
@@ -11,6 +11,9 @@ import type { RuntimeEnv } from "../worker/env";
 import { SqliteDatabase } from "./database";
 import { steamRoutes } from "./steam";
 import { registerSteamPublisher } from "./steam-publish";
+import { accountRoutes } from "./accounts";
+import { donationRoutes } from "./donations";
+import { authenticatedUser } from "../worker/auth";
 
 const path = process.env.APPGAP_DB || "data/appgap.sqlite";
 mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -33,13 +36,15 @@ if (process.argv.includes("--ingest")) {
   assets.use("*", serveStatic({ root: "./dist" }));
   assets.get("*", serveStatic({ path: "./dist/index.html" }));
   const env: RuntimeEnv = {
-    DB: db, SITE_PASSWORD: process.env.SITE_PASSWORD,
+    DB: db, SITE_PASSWORD: process.env.SITE_PASSWORD, ACCOUNTS_ACTIVE:true,
     INGEST_SECRET: process.env.INGEST_SECRET, DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY, DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL,
     ASSETS: { fetch: (request: Request) => assets.fetch(request) } as Fetcher,
   };
   const http = new Hono();
   const attempts = new Map<string, { count: number; until: number }>();
   http.use("*", async (c, next) => {
+    const host=new URL(c.req.url).hostname;
+    if(host!==new URL(origin).hostname && host!=="127.0.0.1" && host!=="localhost") return c.json({error:"invalid host"},400);
     c.header("Cache-Control", "no-store");
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "same-origin");
@@ -50,6 +55,10 @@ if (process.argv.includes("--ingest")) {
   const steamDirectory = process.env.STEAM_DATA_DIR || `${dirname(path)}/steam`;
   registerSteamPublisher(http, steamDirectory, process.env.STEAM_PUBLISH_TOKEN, origin);
   http.use("*", bodyLimit({ maxSize: 8192 }));
+  http.route("/api/account",accountRoutes(env,origin));
+  http.route("/api/donations",donationRoutes(env,origin,process.env.DONATE_URL,join(dirname(path),"donations","qr.png")));
+  for(const page of ["/login","/register","/support"]) http.get(page,c=>assets.fetch(c.req.raw));
+  http.get("/assets/*",c=>assets.fetch(c.req.raw));
   http.route("/api/steam", steamRoutes(env, steamDirectory, origin));
   http.all("*", async (c) => {
     const url = new URL(c.req.url);
@@ -68,6 +77,7 @@ if (process.argv.includes("--ingest")) {
       return response;
     }
     if (url.pathname === "/api/ingest") return c.json({ error: "run the server ingest command over SSH" }, 403);
+    if (!url.pathname.startsWith("/api/") && !await authenticatedUser(c.req.raw,env)) return c.redirect(`/login?next=${encodeURIComponent(url.pathname+url.search+url.hash)}`);
     return worker.fetch(new Request(url, c.req.raw), env, {} as ExecutionContext);
   });
   const port = Number(process.env.PORT || 8790);

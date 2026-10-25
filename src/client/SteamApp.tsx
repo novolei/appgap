@@ -71,7 +71,7 @@ export function SteamApp() {
   const [view, setView] = useState<SteamView | null>(null),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
-    [tab, setTab] = useState("windows"),
+    [tab, setTab] = useState(initial.has("pool") ? "games" : "windows"),
     [query, setQuery] = useState("");
   const [tagDraft, setTagDraft] = useState(tag);
   const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
@@ -93,7 +93,7 @@ export function SteamApp() {
       watch: [],
       build: [],
     }),
-    [poolFilter, setPoolFilter] = useState("all");
+    [poolFilter, setPoolFilter] = useState(["watch","build"].includes(initial.get("pool")||"") ? initial.get("pool")! : "all");
   const params = new URLSearchParams({ country, tag, model, chart }).toString();
   const activeScope = useRef(params);
   activeScope.current = params;
@@ -442,12 +442,12 @@ export function SteamApp() {
                 </button>
               </div>
               <p className="steam-footnote">
-                已有分析自动读取；标准标签筛选共享缓存，自定义文字条件与资料按会话隔离。相同请求合并，只有缺少当前分析时才调用付费模型。
+                已有分析自动读取；标准标签筛选共享缓存，自定义文字条件与资料按账号隔离。相同请求合并，只有缺少当前分析时才调用付费模型。
                 {budget && `今日新研究剩余 ${budget.remaining}/${budget.limit} 次（App Store 与 Steam 共用，香港时间重置），读取缓存不扣额度。`}
               </p>
               {analysis && (
                 <details className="steam-ai" open={analysisOpen} onToggle={(e) => setAnalysisOpen(e.currentTarget.open)}>
-                  <summary>综合论证 · {analysis.stale ? "最近缓存，数据已更新" : analysis.visibility === "shared" ? "共享缓存" : "会话缓存"}</summary>
+                  <summary>综合论证 · {analysis.stale ? "最近缓存，数据已更新" : analysis.visibility === "shared" ? "共享缓存" : "私人缓存"}</summary>
                   <p className="steam-footnote">分析生成于 {new Date(analysis.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Hong_Kong" })}，基于 {new Date(analysis.dataCapturedAt).toLocaleString("zh-CN", { timeZone: "Asia/Hong_Kong" })} 的快照 #{analysis.runId}。{analysis.stale ? "这是旧数据的分析，不代表当前快照；可按需更新。" : "当前缓存有效，不会重复调用模型。"} 模型推断仍需核对原始证据。</p>
                   <Markdown text={analysis.markdown} />
                 </details>
@@ -461,10 +461,10 @@ export function SteamApp() {
                   <label>补充资料（可选，最多 1500 字）<textarea value={notes} maxLength={1500} rows={4}
                     placeholder="团队规模、预算约束、玩法描述或待核验资料。不会自动访问其中的网址。"
                     onChange={(e) => { setNotes(e.target.value); setCustomAnalysis(null); }} /></label>
-                  <p className="steam-footnote">结果仅绑定当前浏览器登录会话，缓存 24 小时，不加入公共分析；每会话每天最多 5 次新研究。新生成会将问题、资料和选中证据发给 DeepSeek，命中缓存则不再发送。不自动联网检索，账号注册尚未启用。</p>
+                  <p className="steam-footnote">结果绑定你的账号，缓存 24 小时，不加入公共分析，可在用户中心找回；每账号每天最多 5 次新研究（App Store 与 Steam 共用）。新生成会将问题、资料和选中证据发给 DeepSeek，命中缓存则不再发送。不自动联网检索。</p>
                   <button disabled={analyzing || loading || !question.trim()}>{analyzing ? "正在生成…" : "生成／读取私有研究"}</button>
                 </form>
-                {customAnalysis && <article className="steam-ai"><h3>自定义研究 · 会话隔离</h3><p className="steam-footnote">{customAnalysis.cached ? "已读取私有缓存" : customAnalysis.coalesced ? "已合并相同请求" : "已生成并缓存"} · 基于快照 #{customAnalysis.runId}，生成于 {new Date(customAnalysis.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Hong_Kong" })}。</p><Markdown text={customAnalysis.markdown} /></article>}
+                {customAnalysis && <article className="steam-ai"><h3>自定义研究 · 账号私有</h3><p className="steam-footnote">{customAnalysis.cached ? "已读取私有缓存" : customAnalysis.coalesced ? "已合并相同请求" : "已生成并缓存"} · 基于快照 #{customAnalysis.runId}，生成于 {new Date(customAnalysis.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Hong_Kong" })}。</p><Markdown text={customAnalysis.markdown} /></article>}
               </details>
               <div className="steam-window-grid">
                 {view.windows.map((w, index) => (

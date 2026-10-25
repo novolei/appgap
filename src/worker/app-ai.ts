@@ -3,6 +3,7 @@ import { latestSuccessfulIngest } from "./ingest";
 import { loadAppDetail } from "./detail";
 import { runDeepseekAnalysis } from "./ai";
 import { AnalysisError, analysisCache, type AnalysisIdentity } from "./analysis-cache";
+import { accountOwner, rememberResearch } from "./research-history";
 
 async function digest(value: unknown) {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
@@ -22,11 +23,15 @@ export async function readAppAnalysis(env: RuntimeEnv, id: string) {
 }
 export async function generateAppAnalysis(env: RuntimeEnv, id: string) {
   const { cache, identity, analysis } = await readAppAnalysis(env, id);
-  if (analysis && !analysis.stale) return { ...analysis, budget: await cache.budget() };
+  if (analysis && !analysis.stale) {
+    await rememberResearch(env,identity.key,`App Store · ${id}`);
+    return { ...analysis, budget: await cache.budget() };
+  }
   const result = await cache.generate(identity, async () => {
     const detail = await loadAppDetail(env, id);
     if (!detail) throw new AnalysisError("未知应用。", 404);
     return runDeepseekAnalysis(env, detail);
-  });
+  }, await accountOwner(env));
+  await rememberResearch(env,identity.key,`App Store · ${id}`);
   return { ...result, budget: await cache.budget() };
 }

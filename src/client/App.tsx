@@ -23,7 +23,6 @@ import {
 } from "./api";
 import { copyText } from "./copy";
 import { formatCount, formatRating, positionText, ratingTone, relativeTime } from "./format";
-import { readPools } from "./storage";
 import { Markdown } from "./Markdown";
 
 const LENS_OR_POOL = [
@@ -112,17 +111,6 @@ export function App() {
     async function bootPools() {
       const remote = await fetchPools();
       if (cancelled) return;
-      const local = readPools();
-      const emptyRemote = remote.watch.length === 0 && remote.build.length === 0;
-      const hasLocal = local.watch.length > 0 || local.build.length > 0;
-      if (emptyRemote && hasLocal) {
-        for (const app of local.build) await savePool(app.appId, "build");
-        for (const app of local.watch) await savePool(app.appId, "watch");
-        localStorage.removeItem("appgap.pools.v1");
-        const again = await fetchPools();
-        if (!cancelled) setPools(again);
-        return;
-      }
       setPools(remote);
     }
     void bootPools().catch(() => undefined);

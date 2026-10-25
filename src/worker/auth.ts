@@ -1,4 +1,4 @@
-import type { RuntimeEnv } from "./env";
+import type { Actor, RuntimeEnv } from "./env";
 
 const COOKIE = "appgap_session";
 const PAYLOAD = "appgap-ok-v1";
@@ -31,7 +31,25 @@ function passwordOf(env: RuntimeEnv): string | undefined {
   return env.SITE_PASSWORD;
 }
 
+export async function authenticatedUser(request: Request, env: RuntimeEnv): Promise<Actor | null> {
+  const account = request.headers.get("Cookie")?.match(/(?:^|;\s*)appgap_user=([^;]+)/)?.[1];
+  if (env.ACCOUNTS_ACTIVE && account) {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(account)) return null;
+    const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(account));
+    const hash = [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2,"0")).join("");
+    return env.DB.prepare(`SELECT u.id,u.username,u.display_name AS displayName,u.role,u.created_at AS createdAt
+      FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`)
+      .bind(hash, new Date().toISOString()).first<Actor>();
+  }
+  if (await legacyAuthed(request, env)) return { id: "owner", username: "site-owner", displayName: "站点管理员", role: "admin", createdAt: "" };
+  return null;
+}
+
 export async function isAuthed(request: Request, env: RuntimeEnv): Promise<boolean> {
+  return Boolean(await authenticatedUser(request, env));
+}
+
+async function legacyAuthed(request: Request, env: RuntimeEnv): Promise<boolean> {
   const secret = passwordOf(env);
   if (!secret) return false;
   const cookie = request.headers.get("Cookie") || "";
@@ -56,12 +74,9 @@ export async function loginResponse(password: string, env: RuntimeEnv, request: 
   const token = `${expires}.${await hmac(secret, `${PAYLOAD}:${expires}`)}`;
   const secure = new URL(request.url).protocol === "https:";
   const cookie = `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure ? "; Secure" : ""}`;
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "set-cookie": cookie,
-    },
-  });
+  const headers = new Headers({"content-type":"application/json; charset=utf-8","set-cookie":cookie});
+  if(env.ACCOUNTS_ACTIVE) headers.append("set-cookie",`appgap_user=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`);
+  return new Response(JSON.stringify({ ok: true }), {headers});
 }
 
 export function loginPage(): Response {

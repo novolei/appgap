@@ -13,6 +13,7 @@ export interface Database {
 }
 
 export type DataEnv = { DB: Database };
+export type Actor = { id: string; username: string; displayName: string; role: "member" | "admin"; createdAt: string };
 
 export type RuntimeEnv = DataEnv & {
   SITE_PASSWORD?: string;
@@ -20,5 +21,7 @@ export type RuntimeEnv = DataEnv & {
   DEEPSEEK_MODEL?: string;
   INGEST_SECRET?: string;
   ALLOW_LOCAL_INGEST?: boolean;
+  ACCOUNTS_ACTIVE?: boolean;
+  USER?: Actor;
   ASSETS?: Fetcher;
 };

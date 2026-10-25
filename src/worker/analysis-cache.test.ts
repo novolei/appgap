@@ -6,6 +6,15 @@ afterEach(() => databases.splice(0).forEach((db) => db.close()));
 const identity: AnalysisIdentity = { key: "snapshot-1", scope: "public-scope", owner: "", visibility: "shared", runId: 1, dataCapturedAt: new Date().toISOString() };
 function database() { const db = new SqliteDatabase(":memory:"); databases.push(db); return db; }
 
+it("charges shared generations to the requesting account without charging cached readers",async()=>{
+  const db=database(),cache=new AnalysisCache(db);
+  for(let i=0;i<5;i++)await cache.generate({...identity,key:`public-${i}`},async()=>"complete shared report","account-a");
+  await expect(cache.generate({...identity,key:"public-6"},async()=>"blocked","account-a")).rejects.toThrow("额度");
+  expect(await cache.generate({...identity,key:"public-0"},async()=>"should not run","account-b")).toMatchObject({cached:true});
+  expect(await cache.budget()).toMatchObject({remaining:15});
+  expect(await db.prepare("SELECT count(*) AS n FROM ai_call_ledger WHERE owner_hash='account-b'").first()).toEqual({n:0});
+});
+
 it("coalesces the same request and persists both cache and daily quota across service instances", async () => {
   const db = database(), cache = new AnalysisCache(db, 2);
   let release!: (value: string) => void;
