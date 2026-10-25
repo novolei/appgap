@@ -57,7 +57,7 @@ export class AnalysisCache {
         if (error instanceof Error && error.message.includes("UNIQUE constraint")) throw new AnalysisError("已有研究正在生成，请稍后重试。");
         throw error;
       }
-      if (!call.meta.changes) throw new AnalysisError("今日研究额度已用完。缓存仍可阅读；自定义研究每个会话每日最多 5 次。");
+      if (!call.meta.changes) throw new AnalysisError("今日研究额度已用完。缓存仍可阅读；每个账号或私人会话每日最多 5 次新研究。");
       try {
         const markdown = await make();
         if (!markdown.trim() || markdown.length > 100000) throw Error("invalid analysis length");
