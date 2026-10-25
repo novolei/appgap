@@ -60,3 +60,7 @@ jobs:
           compression-level: 0
       - name: Publish verified dataset after archiving succeeds
         run: python scripts/steam/publish_branch.py --directory work --prepared
+      - name: Deliver the same verified snapshot through the existing HTTPS tunnel
+        env:
+          STEAM_PUBLISH_TOKEN: ${{ secrets.STEAM_PUBLISH_TOKEN }}
+        run: python scripts/steam/push_site.py

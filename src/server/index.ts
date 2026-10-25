@@ -10,6 +10,7 @@ import { runIngest } from "../worker/ingest";
 import type { RuntimeEnv } from "../worker/env";
 import { SqliteDatabase } from "./database";
 import { steamRoutes } from "./steam";
+import { registerSteamPublisher } from "./steam-publish";
 
 const path = process.env.APPGAP_DB || "data/appgap.sqlite";
 mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -38,7 +39,6 @@ if (process.argv.includes("--ingest")) {
   };
   const http = new Hono();
   const attempts = new Map<string, { count: number; until: number }>();
-  http.use("*", bodyLimit({ maxSize: 8192 }));
   http.use("*", async (c, next) => {
     c.header("Cache-Control", "no-store");
     c.header("X-Content-Type-Options", "nosniff");
@@ -47,7 +47,10 @@ if (process.argv.includes("--ingest")) {
     c.header("X-Robots-Tag", "noindex, nofollow");
     await next();
   });
-  http.route("/api/steam", steamRoutes(env, process.env.STEAM_DATA_DIR || `${dirname(path)}/steam`, origin));
+  const steamDirectory = process.env.STEAM_DATA_DIR || `${dirname(path)}/steam`;
+  registerSteamPublisher(http, steamDirectory, process.env.STEAM_PUBLISH_TOKEN, origin);
+  http.use("*", bodyLimit({ maxSize: 8192 }));
+  http.route("/api/steam", steamRoutes(env, steamDirectory, origin));
   http.all("*", async (c) => {
     const url = new URL(c.req.url);
     const expected = new URL(origin);

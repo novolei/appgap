@@ -20,7 +20,7 @@ markdown("""# Steam 机会研究 · 2026-10-25
 输入为同目录 `steam-snapshot-2026-10-25.json`，可从新站完整 JSON 导出。每条源含请求 URL、时间和 SHA256；服务器原始响应保留 7 次采集。
 使用 Python、pandas、matplotlib、nbformat、nbclient。离线执行本笔记本不会产生模型调用费用。"""),
 code("""from pathlib import Path
-import json, hashlib, math
+import json, gzip, hashlib, math
 from collections import Counter
 from itertools import combinations
 import pandas as pd
@@ -28,14 +28,20 @@ import matplotlib.pyplot as plt
 from IPython.display import display
 root = Path.cwd()
 path = root / 'steam-snapshot-2026-10-25.json'
-snapshot = json.loads(path.read_text(encoding='utf-8'))
+if path.exists():
+    input_bytes = path.read_bytes()
+else:
+    with gzip.open(path.with_suffix('.json.gz'),'rb') as stream:
+        input_bytes = stream.read(25*1024*1024+1)
+assert len(input_bytes) <= 25*1024*1024
+snapshot = json.loads(input_bytes)
 games = pd.DataFrame(snapshot['games'].values()).set_index('appId', drop=False)
 ranks = pd.DataFrame(snapshot['ranks'])
 sales = ranks[ranks.chart.eq('sales')].copy()
 primary = games.loc[sorted(set(sales.appId))].copy()
 plt.rcParams.update({'font.size':10, 'figure.dpi':130, 'axes.spines.top':False, 'axes.spines.right':False})
 print('Snapshot:', snapshot['startedAt'], 'to', snapshot['capturedAt'])
-print('Input SHA256:', hashlib.sha256(path.read_bytes()).hexdigest())
+print('Input SHA256:', hashlib.sha256(input_bytes).hexdigest())
 print('Catalog / sales union / ranks:', len(games), len(primary), len(ranks))
 print('Review coverage:', snapshot['reviewCoverage'])
 """),

@@ -33,7 +33,9 @@ done
 if [ -n "$old" ]; then ln -sfn "$old" /opt/appgap/previous; fi
 systemctl enable appgap appgap-ingest.timer appgap-backup.timer
 systemctl start appgap-ingest.timer appgap-backup.timer
-if [ -f /etc/appgap-data.key ]; then
+if grep -q '^STEAM_PUBLISH_TOKEN=' /etc/appgap.env; then
+  systemctl disable --now appgap-steam.timer appgap-steam-sync.timer
+elif [ -f /etc/appgap-data.key ]; then
   systemctl disable --now appgap-steam.timer
   systemctl enable --now appgap-steam-sync.timer
 else

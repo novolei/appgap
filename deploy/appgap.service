@@ -17,7 +17,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/appgap
-MemoryMax=384M
+MemoryMax=768M
 CPUQuota=100%
 Nice=10
 
