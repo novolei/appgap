@@ -5,6 +5,7 @@ import pathlib
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from publish_branch import package
 
 spec=importlib.util.spec_from_file_location('steam_sync',pathlib.Path(__file__).resolve().parents[2]/'deploy/sync-steam.py')
@@ -13,6 +14,15 @@ spec.loader.exec_module(sync)
 
 
 class DistributionChecks(unittest.TestCase):
+    def test_encrypted_dns_rejects_private_addresses_and_keeps_endpoint_pinning_separate(self):
+        answer=json.dumps({'Answer':[{'type':1,'data':'127.0.0.1'},{'type':1,'data':'140.82.114.36'}]}).encode()
+        with patch.object(sync.subprocess,'check_output',return_value=answer) as request:
+            self.assertEqual(sync.github_addresses(),['140.82.114.36'])
+            self.assertTrue(all(call.args[0][0]=='curl' for call in request.call_args_list))
+        with patch.object(sync.subprocess,'check_output',return_value=b'{"Answer":[]}'):
+            with self.assertRaisesRegex(ValueError,'did not return'):
+                sync.github_addresses()
+
     def test_compressed_bomb_is_bounded(self):
         with self.assertRaisesRegex(ValueError,'budget'):
             sync.unpack(gzip.compress(b'x'*10000),100)
