@@ -3,11 +3,6 @@ on:
   schedule:
     - cron: '13 1 * * *'
   workflow_dispatch:
-    inputs:
-      mode:
-        type: choice
-        options: [collect, bootstrap]
-        default: collect
 concurrency:
   group: steam-dataset
   cancel-in-progress: false
@@ -33,21 +28,13 @@ jobs:
       - name: Verify public Steam access from the runner
         run: python scripts/steam/probe.py
       - name: Collect fresh data
-        if: inputs.mode != 'bootstrap'
         run: python scripts/steam/collect.py --directory work
       - name: Package bounded payloads
         run: python scripts/steam/publish_branch.py --directory work --package-only
-      - name: Preserve source responses
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MODE: ${{ inputs.mode }}
+      - name: Preserve and verify source responses
         run: |
-          if [ "$MODE" = bootstrap ]; then
-            gh release download bootstrap-2026-10-25 --pattern raw.tar.gz --dir work
-          else
-            tar -czf work/raw.tar.gz -C work raw
-          fi
-          test "$(stat -c %s work/raw.tar.gz)" -le 33554432
+          tar -czf work/raw.tar.gz -C work raw
+          python scripts/steam/check_archive.py --directory work --archive work/raw.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: steam-research-${{ github.run_id }}

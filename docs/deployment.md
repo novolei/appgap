@@ -32,10 +32,16 @@ Steam 管线在私有仓库 `novolei/appgap-steam-data` 每日香港时间 09:13
 
 导入请求最多 24 MiB；每个压缩产物最多 8 MiB；解压 JSON / SQLite 最多 25 / 128 MiB，至少保留 1 GiB 空余磁盘。完整 payload 保留两期、紧凑历史保留 400 天，原始响应留私有 Artifacts 7 天（单次最多 32 MiB）。网站失败时保留旧数据。私有 Actions 使用账号共享分钟数和存储配额，未改变预算或计费设置。
 
-已验证受保护的新站 App Store / Steam 页面、真实采集、GitHub Actions HTTPS 交付、Node → Python → SQLite 导入与重复包幂等。App Store 新站首次采集得到 3,818 款应用、15,166 条榜单和 560 个机会。未运行付费 DeepSeek 生成；仍需 14–28 天同口径历史后再验证持续趋势。
+初次部署已验证受保护的新站 App Store / Steam 页面、真实采集、GitHub Actions HTTPS 交付、Node → Python → SQLite 导入与重复包幂等。App Store 新站首次采集得到 3,818 款应用、15,166 条榜单和 560 个机会。当时未运行付费 DeepSeek 生成；后续完整真实验收见下方更新，持续趋势仍需 14–28 天同口径历史。
 
 收尾验证：新版源码的 [40184884997](https://github.com/novolei/appgap-steam-data/actions/runs/40184884997) 以 `bootstrap` 模式成功完成真实 Steam 探测、已有完整样本归档和 HTTPS 重复包交付；该运行没有重新扫描所有游戏评论，日常定时模式仍为 `collect`。首份完整批次通过开发电脑 OpenClash 网络采集，不将交付验证冒充完整 Actions 扫描。
 
 移除旧采集 raw、Git 镜像、临时拉取目录和旧发布归档后，Steam 在线目录约 21 MiB；VPS 根盘约 11 / 30 GiB，剩余约 19 GiB。AppGap 备份约 13 MiB，已于 UTC 10:28 实际解压恢复主库 / Steam 历史并通过 `quick_check`，历史 payload 与 JSON 一致。旧 GitHub Deploy Key 已删除，VPS 上对应私钥 / known-hosts 和两组旧采集单元均移除；保留当前、上一版及少量最近应用版本。mybros 仍为原 PID 2577971、启动时间 10-23 06:50 UTC，Mini Tanks 原 cron 未改。未登录访问研究报告返回登录页，不能只看其 HTTP 200 判断泄露。
 
 离线 Notebook 的 8 个代码单元已执行通过；另在临时空目录仅使用私有仓库的压缩输入重新运行 8 个单元也通过。冻结输入 SHA256 `f77f9c512a79f41271384606d40461bffc2d46d9810525b38575db7f0b62d948` 与线上快照相同。
+
+## 后续全量与共享研究更新
+
+完整 Actions 运行、快照 #4、真实 Steam / App Store / 自定义模型调用及缓存证据见 [verification-2026-10-25.md](verification-2026-10-25.md)。现在实时快照已更新，前段的 430 款及 SHA 仅指首批冻结样本。手工 Actions 已统一完整采集，移除会把新快照与旧 raw 配对的 bootstrap 测试入口，归档增加源响应逐份校验。
+
+AI 新增迁移 `0007_ai_cache.sql`，详见 [ai-cache.md](ai-cache.md)：App Store 与 Steam 共享持久缓存、并发协调和每日 20 次新请求额度。标准报告 7 天，自定义内容按签名会话隔离 24 小时；读取缓存不调用模型，旧报告明确标记数据日期。标签支持输入补全、文字匹配及 `+` 组合。现有访问口令不变，注册与捐赠只给出方案，未开启。

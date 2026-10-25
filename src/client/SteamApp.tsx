@@ -326,13 +326,12 @@ export function SteamApp() {
         </label>
         <div className="steam-tag-field">
           <label htmlFor="steam-tag-input">游戏标签</label>
-          <div className="steam-tag-entry">
+          <form className="steam-tag-entry" onSubmit={(e) => { e.preventDefault(); setTag(tagDraft.trim()); }}>
             <input id="steam-tag-input" list="steam-tag-options" value={tagDraft} maxLength={100}
               placeholder="全部类型；输入标签或关键词" autoComplete="off"
-              onChange={(e) => setTagDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setTag(tagDraft.trim()); } }} />
-            <button type="button" onClick={() => setTag(tagDraft.trim())}>应用</button>
-          </div>
+              onChange={(e) => setTagDraft(e.target.value)} />
+            <button type="submit">应用</button>
+          </form>
           <datalist id="steam-tag-options">{view?.tags.map((t) => <option key={t} value={t} />)}</datalist>
           <small>可自定义文字匹配；用 + 组合，留空显示全部。</small>
         </div>
