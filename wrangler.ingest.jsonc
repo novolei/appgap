@@ -3,6 +3,7 @@
   "name": "appgap-ingest",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-20",
+  "vars": { "ALLOW_LOCAL_INGEST": true },
   "d1_databases": [
     {
       "binding": "DB",

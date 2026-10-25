@@ -1,7 +1,8 @@
 import { buildOneLiner } from "../shared/oneLiner";
 import { buildHistoryIndex, classifyOpportunities, type AppSnapshot, type MetricSnapshot, type RankRecord } from "../shared/classify";
 import type { LensId } from "../shared/catalog";
-import { fetchChart, fetchReviews, INGEST_JOBS, lookupApps, mapPool, tokyoDate, type ChartEntry, type LookupApp } from "./apple";
+import type { DataEnv, Database, Statement } from "./env";
+import { fetchChart, fetchReviews, INGEST_JOBS, lookupApps, mapPool, snapshotDate, type ChartEntry, type LookupApp } from "./apple";
 import {
   isActivelyIngesting,
   isStaleRunning,
@@ -22,7 +23,7 @@ export type IngestStats = {
   source: string;
 };
 
-async function batchRun(db: D1Database, statements: D1PreparedStatement[]) {
+async function batchRun(db: Database, statements: Statement[]) {
   const chunkSize = 40;
   for (let i = 0; i < statements.length; i += chunkSize) {
     await db.batch(statements.slice(i, i + chunkSize));
@@ -53,18 +54,21 @@ function mergeApp(entry: ChartEntry, lookup: LookupApp | undefined): AppSnapshot
   };
 }
 
-export async function runIngest(env: Env, input: { source: string }): Promise<IngestStats> {
+export async function runIngest(env: DataEnv, input: { source: string }): Promise<IngestStats> {
   await expireStaleIngest(env);
   if (await isIngestLocked(env)) {
     throw new Error("ingest already running");
   }
   const started = new Date().toISOString();
-  const date = tokyoDate();
+  const date = snapshotDate();
   const inserted = await env.DB.prepare(
     "INSERT INTO ingest_runs (source, started_at, status) VALUES (?, ?, 'running')",
   )
     .bind(input.source, started)
-    .run();
+    .run().catch((error: unknown) => {
+      if (String(error).includes("UNIQUE constraint failed: ingest_runs.status")) throw new Error("ingest already running");
+      throw error;
+    });
   const runId = inserted.meta.last_row_id;
 
   try {
@@ -77,9 +81,10 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
       }
     });
     const entries = chartResults.flat();
-    if (entries.length < MIN_CHART_ROWS) {
+    const successfulFeeds = chartResults.filter((rows) => rows.length > 0).length;
+    if (entries.length < MIN_CHART_ROWS || successfulFeeds < Math.ceil(INGEST_JOBS.length * 0.9)) {
       throw new Error(
-        `Apple 榜单不完整（${entries.length} 条，至少 ${MIN_CHART_ROWS}）。Cloudflare IP 常被 403。已保留上一份 D1 快照。`,
+        `Apple 榜单不完整（${entries.length} 条，${successfulFeeds}/${INGEST_JOBS.length} 份榜单）。已保留上一份快照。`,
       );
     }
     const idsByCountry = new Map<string, Set<string>>();
@@ -90,7 +95,7 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
     }
 
     const lookups = new Map<string, LookupApp>();
-    for (const [country, ids] of idsByCountry) {
+    await mapPool([...idsByCountry], 3, async ([country, ids]) => {
       try {
         const found = await lookupApps([...ids], country);
         for (const item of found) {
@@ -101,7 +106,7 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
       } catch (error) {
         console.error("lookup country failed", country, error);
       }
-    }
+    });
 
     const apps = new Map<string, ReturnType<typeof mergeApp>>();
     const metrics: MetricSnapshot[] = [];
@@ -109,7 +114,8 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
     const ranks: RankRecord[] = [];
 
     for (const entry of entries) {
-      const lookup = lookups.get(`${entry.country}:${entry.appId}`) ?? lookups.get(entry.appId);
+      const localLookup = lookups.get(`${entry.country}:${entry.appId}`);
+      const lookup = localLookup ?? lookups.get(entry.appId);
       const merged = mergeApp(entry, lookup);
       const existing = apps.get(merged.id);
       if (existing) {
@@ -135,14 +141,15 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
         metrics.push({
           appId: merged.id,
           country: entry.country,
-          rating: lookup?.rating ?? null,
-          ratingCount: lookup?.ratingCount ?? null,
+          rating: localLookup?.rating ?? null,
+          ratingCount: localLookup?.ratingCount ?? null,
         });
       }
     }
 
+    await env.DB.batch(["apps_staging", "chart_ranks_staging", "app_metrics_staging"].map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
     const appInsert = env.DB.prepare(
-      `INSERT OR REPLACE INTO apps (id, name, artist_id, artist_name, bundle_id, icon_url, genre_id, genre_name, description, one_liner, formatted_price, track_view_url, updated_at)
+      `INSERT INTO apps_staging (id, name, artist_id, artist_name, bundle_id, icon_url, genre_id, genre_name, description, one_liner, formatted_price, track_view_url, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     await batchRun(
@@ -166,25 +173,23 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
       ),
     );
 
-    await env.DB.prepare("DELETE FROM chart_ranks WHERE snapshot_date = ?").bind(date).run();
     const rankInsert = env.DB.prepare(
-      "INSERT INTO chart_ranks (snapshot_date, country, chart, genre_id, rank, app_id) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO chart_ranks_staging (snapshot_date, country, chart, genre_id, rank, app_id) VALUES (?, ?, ?, ?, ?, ?)",
     );
     await batchRun(
       env.DB,
       ranks.map((row) => rankInsert.bind(date, row.country, row.chart, row.genreId, row.rank, row.appId)),
     );
 
-    await env.DB.prepare("DELETE FROM app_metrics WHERE snapshot_date = ?").bind(date).run();
     const metricInsert = env.DB.prepare(
-      "INSERT INTO app_metrics (snapshot_date, country, app_id, rating, rating_count) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO app_metrics_staging (snapshot_date, country, app_id, rating, rating_count) VALUES (?, ?, ?, ?, ?)",
     );
     await batchRun(
       env.DB,
       metrics.map((row) => metricInsert.bind(date, row.country, row.appId, row.rating, row.ratingCount)),
     );
 
-    const opportunityCount = await rebuildOpportunities(env, date);
+    const opportunityCount = await rebuildOpportunities(env, date, { staged: true });
 
     const stats: IngestStats = {
       date,
@@ -194,11 +199,18 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
       source: input.source,
     };
     if (runId != null) {
-      await env.DB.prepare(
-        "UPDATE ingest_runs SET finished_at = ?, status = 'success', stats = ? WHERE id = ?",
-      )
-        .bind(new Date().toISOString(), JSON.stringify(stats), runId)
-        .run();
+      await env.DB.batch([
+        env.DB.prepare("INSERT OR REPLACE INTO apps SELECT * FROM apps_staging"),
+        env.DB.prepare("DELETE FROM chart_ranks WHERE snapshot_date = ?").bind(date),
+        env.DB.prepare("INSERT INTO chart_ranks SELECT * FROM chart_ranks_staging"),
+        env.DB.prepare("DELETE FROM app_metrics WHERE snapshot_date = ?").bind(date),
+        env.DB.prepare("INSERT INTO app_metrics SELECT * FROM app_metrics_staging"),
+        env.DB.prepare("DELETE FROM opportunities"),
+        env.DB.prepare(`INSERT INTO opportunities (${OPPORTUNITY_COLUMNS}) SELECT ${OPPORTUNITY_COLUMNS} FROM opportunities_staging`),
+        env.DB.prepare(
+          "UPDATE ingest_runs SET finished_at = ?, status = 'success', stats = ? WHERE id = ?",
+        ).bind(new Date().toISOString(), JSON.stringify(stats), runId),
+      ]);
     }
     return stats;
   } catch (error) {
@@ -214,29 +226,34 @@ export async function runIngest(env: Env, input: { source: string }): Promise<In
   }
 }
 
-export async function rebuildOpportunities(env: Env, date: string, options: { reviews?: boolean } = {}): Promise<number> {
+export async function rebuildOpportunities(env: DataEnv, date: string, options: { reviews?: boolean; staged?: boolean } = {}): Promise<number> {
+  const appTable = options.staged ? "apps_staging" : "apps";
+  const metricTable = options.staged ? "app_metrics_staging" : "app_metrics";
   const appRows = await env.DB.prepare(
     `SELECT id, name, artist_name AS artistName, icon_url AS iconUrl, description,
             track_view_url AS trackViewUrl, one_liner AS oneLiner, genre_id AS genreId
-     FROM apps`,
+     FROM ${appTable}`,
   ).all<AppSnapshot & { description?: string | null; genreId?: string | null }>();
   const rankRows = await env.DB.prepare(
     `SELECT snapshot_date AS date, country, chart, genre_id AS genreId, rank, app_id AS appId
-     FROM chart_ranks WHERE snapshot_date >= date(?, '-30 days')`,
+     FROM chart_ranks WHERE snapshot_date >= date(?, '-1 year') AND snapshot_date ${options.staged ? "<" : "<="} ?
+     ${options.staged ? "UNION ALL SELECT snapshot_date AS date, country, chart, genre_id AS genreId, rank, app_id AS appId FROM chart_ranks_staging" : ""}`,
   )
-    .bind(date)
+    .bind(date, date)
     .all<RankRecord>();
   const metricRows = await env.DB.prepare(
     `SELECT app_id AS appId, country, rating, rating_count AS ratingCount
-     FROM app_metrics WHERE snapshot_date = ?`,
+     FROM ${metricTable} WHERE snapshot_date = ?`,
   )
     .bind(date)
     .all<MetricSnapshot>();
 
+  const primaryByApp = new Map<string, RankRecord>();
+  for (const row of rankRows.results) {
+    if (row.date === date && (!primaryByApp.has(row.appId) || row.rank < primaryByApp.get(row.appId)!.rank)) primaryByApp.set(row.appId, row);
+  }
   const apps = (appRows.results ?? []).map((app) => {
-    const primary = (rankRows.results ?? [])
-      .filter((row) => row.appId === app.id && row.date === date)
-      .sort((a, b) => a.rank - b.rank)[0];
+    const primary = primaryByApp.get(app.id);
     const oneLiner = buildOneLiner({
       name: app.name,
       description: app.description,
@@ -293,11 +310,11 @@ export async function rebuildOpportunities(env: Env, date: string, options: { re
       ),
     ),
   );
-  await env.DB.batch([
+  if (!options.staged) await env.DB.batch([
     env.DB.prepare("DELETE FROM opportunities"),
     env.DB.prepare(`INSERT INTO opportunities (${OPPORTUNITY_COLUMNS}) SELECT ${OPPORTUNITY_COLUMNS} FROM opportunities_staging`),
   ]);
-  const oneLinerUpdate = env.DB.prepare("UPDATE apps SET one_liner = ? WHERE id = ?");
+  const oneLinerUpdate = env.DB.prepare(`UPDATE ${appTable} SET one_liner = ? WHERE id = ?`);
   await batchRun(
     env.DB,
     apps.map((app) => oneLinerUpdate.bind(app.oneLiner, app.id)),
@@ -353,7 +370,7 @@ async function d1Retry<T>(label: string, fn: () => Promise<T>): Promise<T> {
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-export async function latestIngest(env: Env) {
+export async function latestIngest(env: DataEnv) {
   return d1Retry("latestIngest", () =>
     env.DB.prepare(
       "SELECT id, source, started_at, finished_at, status, stats, error FROM ingest_runs ORDER BY id DESC LIMIT 1",
@@ -361,13 +378,13 @@ export async function latestIngest(env: Env) {
   );
 }
 
-export async function latestSuccessfulIngest(env: Env) {
+export async function latestSuccessfulIngest(env: DataEnv) {
   return env.DB.prepare(
     "SELECT id, source, started_at, finished_at, status, stats, error FROM ingest_runs WHERE status = 'success' ORDER BY id DESC LIMIT 1",
   ).first<IngestRunRow>();
 }
 
-export async function expireStaleIngest(env: Env): Promise<void> {
+export async function expireStaleIngest(env: DataEnv): Promise<void> {
   const latest = await latestIngest(env);
   if (!latest || latest.status !== "running") return;
   if (!isStaleRunning(latest.started_at)) return;
@@ -380,12 +397,12 @@ export async function expireStaleIngest(env: Env): Promise<void> {
   );
 }
 
-export async function isIngestLocked(env: Env): Promise<boolean> {
+export async function isIngestLocked(env: DataEnv): Promise<boolean> {
   await expireStaleIngest(env);
   return isActivelyIngesting(await latestIngest(env));
 }
 
-export async function lensCounts(env: Env): Promise<Record<LensId, number>> {
+export async function lensCounts(env: DataEnv): Promise<Record<LensId, number>> {
   const rows = await env.DB.prepare(
     "SELECT lens, COUNT(*) AS count FROM opportunities GROUP BY lens",
   ).all<{ lens: LensId; count: number }>();

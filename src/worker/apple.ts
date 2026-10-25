@@ -6,7 +6,8 @@ const APPLE_UAS = [
   "iTunes/12.12.4 (Macintosh; OS X 10.15.7) AppleWebKit/605.1.15",
 ];
 
-export const LOOKUP_CHUNK_SIZE = 10;
+export const LOOKUP_CHUNK_SIZE = 100;
+let nextLookupAt = 0;
 
 class AppleHttpError extends Error {
   status: number;
@@ -62,7 +63,13 @@ async function fetchJson(url: string, attempts = 3): Promise<unknown> {
   let lastError: unknown;
   for (let i = 0; i < attempts; i += 1) {
     try {
+      if (url.startsWith("https://itunes.apple.com/lookup?")) {
+        const start = Math.max(Date.now(), nextLookupAt);
+        nextLookupAt = start + 3000;
+        if (start > Date.now()) await new Promise((resolve) => setTimeout(resolve, start - Date.now()));
+      }
       const response = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
         headers: { "User-Agent": APPLE_UAS[i % APPLE_UAS.length], Accept: "application/json" },
       });
       if (response.status === 404) return null;
@@ -126,8 +133,8 @@ export async function fetchChart(input: {
       artistId: parseArtistId(attr(entry["im:artist"], "href")),
       bundleId: attr(entry.id, "im:bundleId"),
       iconUrl: labelOf(lastImage) || null,
-      genreId: attr(entry.category, "im:id") ?? input.genreId,
-      genreName: attr(entry.category, "label") ?? genreName,
+      genreId: input.genreId,
+      genreName,
       summary: labelOf(entry.summary),
       country: input.country,
       chart: input.chart,
@@ -167,7 +174,7 @@ function parseLookupResults(json: { results?: Array<Record<string, unknown>> } |
 }
 
 async function lookupChunk(ids: string[], country: string): Promise<LookupApp[]> {
-  const url = `https://itunes.apple.com/lookup?id=${ids.join(",")}&country=${country}`;
+  const url = `https://itunes.apple.com/lookup?id=${ids.join(",")}&country=${country}&limit=200`;
   const json = (await fetchJson(url, 2)) as { results?: Array<Record<string, unknown>> } | null;
   return parseLookupResults(json);
 }
@@ -184,7 +191,7 @@ export async function lookupApps(ids: string[], country: string): Promise<Lookup
       consecutiveFails = 0;
     } catch (error) {
       consecutiveFails += 1;
-      console.error("lookup chunk failed", country, chunk.length, error);
+      console.error("lookup chunk failed", country, chunk.length, error instanceof AppleHttpError ? error.status : String(error));
       if (consecutiveFails >= 3) {
         console.error("lookup giving up for country", country);
         break;
@@ -231,9 +238,9 @@ export async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => 
   return results;
 }
 
-export function tokyoDate(now = new Date()): string {
+export function snapshotDate(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
+    timeZone: "Asia/Hong_Kong",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

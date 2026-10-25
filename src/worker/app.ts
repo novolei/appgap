@@ -92,7 +92,10 @@ function uniqueByApp(rows: OppRecord[]): OppRecord[] {
 
 const app = new Hono<{ Bindings: RuntimeEnv }>();
 
-app.get("/api/health", (context) => context.json({ ok: true }));
+app.get("/api/health", async (context) => {
+  await context.env.DB.prepare("SELECT 1").first();
+  return context.json({ ok: true });
+});
 
 app.get("/api/meta", async (context) => {
   const latest = await latestIngest(context.env);
@@ -130,12 +133,12 @@ app.get("/api/opportunities", async (context) => {
        FROM opportunities o
        JOIN apps a ON a.id = o.app_id
        JOIN (
-         SELECT app_id, country, MIN(rank) AS rank
+         SELECT app_id, country, chart, genre_id, MIN(rank) AS rank
          FROM chart_ranks
          WHERE country = ?
            AND snapshot_date = (SELECT MAX(snapshot_date) FROM chart_ranks)
-         GROUP BY app_id, country
-       ) cr ON cr.app_id = o.app_id
+         GROUP BY app_id, country, chart, genre_id
+       ) cr ON cr.app_id = o.app_id AND cr.chart = o.chart AND cr.genre_id = o.genre_id
        LEFT JOIN app_metrics m
          ON m.app_id = o.app_id AND m.country = cr.country
         AND m.snapshot_date = (SELECT MAX(snapshot_date) FROM chart_ranks)
@@ -295,10 +298,10 @@ app.get("/api/pools", async (context) => {
 });
 
 app.post("/api/pools", async (context) => {
-  const body = await context.req.json<{ appId?: string; pool?: PoolId | null }>().catch(() => null);
-  const appId = body?.appId?.trim();
-  if (!appId) return context.json({ error: "missing appId" }, 400);
-  if (!body?.pool) {
+  const body: unknown = await context.req.json().catch(() => null);
+  if (!body || typeof body !== "object" || !("appId" in body) || typeof body.appId !== "string" || !/^\d{1,20}$/.test(body.appId) || !("pool" in body)) return context.json({ error: "invalid pool request" }, 400);
+  const appId = body.appId;
+  if (body.pool === null) {
     await context.env.DB.prepare("DELETE FROM pools WHERE app_id = ?").bind(appId).run();
     return context.json({ ok: true });
   }
@@ -314,11 +317,6 @@ app.post("/api/pools", async (context) => {
 });
 
 app.post("/api/ingest", async (context) => {
-  const secret = context.env.INGEST_SECRET;
-  const given = context.req.header("authorization")?.replace(/^Bearer\s+/i, "") || context.req.query("key");
-  if (secret && given !== secret) {
-    return context.json({ error: "unauthorized" }, 401);
-  }
   if (context.req.query("rebuild") === "1") {
     const lastOk = await context.env.DB.prepare(
       "SELECT stats FROM ingest_runs WHERE status = 'success' ORDER BY id DESC LIMIT 1",

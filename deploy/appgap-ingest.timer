@@ -1,0 +1,10 @@
+[Unit]
+Description=AppGap weekly refresh at Monday 08:30 Hong Kong time
+
+[Timer]
+OnCalendar=Mon *-*-* 08:30:00 Asia/Hong_Kong
+Persistent=true
+Unit=appgap-ingest.service
+
+[Install]
+WantedBy=timers.target

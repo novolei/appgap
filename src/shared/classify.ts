@@ -72,13 +72,6 @@ export function buildHistoryIndex(rows: RankRecord[], today: string): HistoryInd
   };
 }
 
-function metricFor(metrics: MetricSnapshot[], appId: string, country: string): MetricSnapshot | undefined {
-  return (
-    metrics.find((item) => item.appId === appId && item.country === country) ??
-    metrics.find((item) => item.appId === appId)
-  );
-}
-
 function bestGrossing(positions: RankRecord[]): RankRecord | undefined {
   const grossing = positions.filter((item) => item.chart === "grossing").sort((a, b) => a.rank - b.rank);
   return grossing[0] ?? positions.slice().sort((a, b) => a.rank - b.rank)[0];
@@ -155,6 +148,7 @@ export function classifyOpportunities(input: {
     byApp.set(rank.appId, list);
   }
   const apps = new Map(input.apps.map((app) => [app.id, app]));
+  const metrics = new Map(input.metrics.map((item) => [`${item.appId}|${item.country}`, item]));
   const countryCount = COUNTRIES.length;
   const result: OpportunityRow[] = [];
 
@@ -163,7 +157,7 @@ export function classifyOpportunities(input: {
     if (!app) continue;
     const primary = bestGrossing(positions);
     if (!primary) continue;
-    const metric = metricFor(input.metrics, appId, primary.country);
+    const metric = metrics.get(`${appId}|${primary.country}`);
     const rating = metric?.rating ?? null;
     const ratingCount = metric?.ratingCount ?? 0;
     const oneLiner = input.oneLinerFor(app, primary);

@@ -2,8 +2,9 @@ import { analyzeApp } from "../shared/analysis";
 import type { AppDetail, OpportunityRow, ReviewItem } from "../shared/types";
 import { chineseName, chineseOneLiner, chineseReview, hasForeignScript } from "../shared/translate";
 import { fetchReviews } from "./apple";
+import type { DataEnv } from "./env";
 
-export async function loadAppDetail(env: Env, id: string): Promise<AppDetail | null> {
+export async function loadAppDetail(env: DataEnv, id: string): Promise<AppDetail | null> {
   const appRow = await env.DB.prepare("SELECT * FROM apps WHERE id = ?").bind(id).first<{
     id: string;
     name: string;
@@ -22,6 +23,7 @@ export async function loadAppDetail(env: Env, id: string): Promise<AppDetail | n
     "SELECT * FROM opportunities WHERE app_id = ? ORDER BY score DESC LIMIT 1",
   ).bind(id).first<{
     country: string;
+    chart: string;
     rank: number;
     genre_id: string;
     rating: number | null;
@@ -90,6 +92,7 @@ export async function loadAppDetail(env: Env, id: string): Promise<AppDetail | n
   }
 
   const analysis = analyzeApp({
+    chart: opp?.chart || positions.results?.[0]?.chart,
     name: appRow.name,
     country,
     rank: opp?.rank || positions.results?.[0]?.rank || 0,

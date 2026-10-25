@@ -7,17 +7,18 @@
     "dev": "vite --host 127.0.0.1 --port 5173",
     "dev:worker": "wrangler dev --port 8787",
     "build": "vite build && tsc --noEmit",
+    "build:server": "pnpm build && vite build --config vite.server.config.ts",
+    "start": "node dist-server/index.js",
+    "ingest:server": "node dist-server/index.js --ingest",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "deploy": "pnpm build && wrangler d1 migrations apply appgap --remote && wrangler deploy",
     "ingest:prod": "bash scripts/ingest-to-prod.sh",
     "cf-typegen": "wrangler types"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "workerd"]
-  },
   "dependencies": {
-    "hono": "^4.12.15",
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.13",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },

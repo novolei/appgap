@@ -1,4 +1,4 @@
-export const INGEST_STALE_MS = 15 * 60 * 1000;
+export const INGEST_STALE_MS = 60 * 60 * 1000;
 
 export type IngestRunRow = {
   id: number;

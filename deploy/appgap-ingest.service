@@ -1,0 +1,21 @@
+[Unit]
+Description=AppGap weekly Apple chart ingest
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=appgap
+Group=appgap
+WorkingDirectory=/opt/appgap/current
+EnvironmentFile=/etc/appgap.env
+ExecStart=/opt/appgap/runtime/node/bin/node dist-server/index.js --ingest
+TimeoutStartSec=55min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/appgap
+MemoryMax=768M
+CPUQuota=100%
+Nice=15

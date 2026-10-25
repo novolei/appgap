@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   COUNTRIES,
   DATA_SOURCE,
@@ -129,6 +129,7 @@ export function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"app" | "list" | null>(null);
+  const currentApp = useRef(activeId);
 
   useEffect(() => {
     writeHash(lens, activeId, query, country);
@@ -206,6 +207,7 @@ export function App() {
 
   useEffect(() => {
     setAiText(null);
+    currentApp.current = activeId;
     setAiAt(null);
     setAiError(null);
     setAiLoading(false);
@@ -219,6 +221,7 @@ export function App() {
     }
     let cancelled = false;
     setDetailLoading(true);
+    setDetail(null);
     fetchAppDetail(activeId)
       .then((data) => {
         if (cancelled) return;
@@ -269,16 +272,19 @@ export function App() {
 
   async function onAnalyze(fresh = false) {
     if (!activeId) return;
+    const requestedId = activeId;
     setAiLoading(true);
     setAiError(null);
     try {
       const result = await requestAnalysis(activeId, fresh);
+      if (currentApp.current !== requestedId) return;
       setAiText(result.markdown);
       setAiAt(result.createdAt);
     } catch (err) {
+      if (currentApp.current !== requestedId) return;
       setAiError(err instanceof Error ? err.message : "分析失败");
     } finally {
-      setAiLoading(false);
+      if (currentApp.current === requestedId) setAiLoading(false);
     }
   }
 

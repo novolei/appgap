@@ -14,6 +14,7 @@ const PAIN_RULES: Array<{ re: RegExp; label: string }> = [
 export function analyzeApp(input: {
   name: string;
   country: string;
+  chart?: string;
   rank: number;
   genreId: string;
   rating: number | null;
@@ -34,9 +35,10 @@ export function analyzeApp(input: {
       ? `评分 ${input.rating.toFixed(1)}${input.ratingCount ? `，${input.ratingCount.toLocaleString("en-US")} 条评价` : ""}`
       : "评分数据不足";
   const zhName = chineseName(input.name, input.genreId);
+  const free = input.chart === "free";
   const bullets = [
-    `在${countryName(input.country)}的${genreLabel(input.genreId)}畅销榜排到第 ${input.rank}，说明这个需求有人付钱。`,
-    ratingText + (input.rating != null && input.rating < 4 ? "。名次靠前，口碑却撑不住。" : "。"),
+    input.rank > 0 ? `在${countryName(input.country)}的${genreLabel(input.genreId)}${free ? "免费榜" : "畅销榜"}排到第 ${input.rank}。${free ? "这是关注度线索，不能据此推断收入。" : "这是付费需求线索，不代表实际收入数字。"}` : "当前没有上榜记录，不能据此判断需求或收入。",
+    ratingText + (input.rating != null && input.rating < 4 ? "。评分低于 4，建议核对近期评价。" : "。"),
   ];
   if (painList.length) {
     bullets.push(`差评里反复出现：${painList.join("、")}。`);
@@ -49,7 +51,7 @@ export function analyzeApp(input: {
       : "可以做更干净的同类工具：核心功能更稳，话术更老实，收费更清楚。";
 
   return {
-    headline: `${zhName} 能排到第 ${input.rank}，靠的是需求，不是口碑。`,
+    headline: `${zhName}：榜单与用户反馈摘要`,
     bullets,
     pains: painList,
     move,

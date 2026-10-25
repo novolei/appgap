@@ -31,9 +31,11 @@ export function requestAnalysis(id: string, fresh = false) {
   });
 }
 
-export function fetchAppsByIds(ids: string[]) {
+export async function fetchAppsByIds(ids: string[]) {
   if (ids.length === 0) return Promise.resolve({ items: [] as OpportunityRow[] });
-  return getJson<{ items: OpportunityRow[] }>(`/api/apps?ids=${ids.join(",")}`);
+  const batches: Promise<{ items: OpportunityRow[] }>[] = [];
+  for (let i = 0; i < ids.length; i += 40) batches.push(getJson<{ items: OpportunityRow[] }>(`/api/apps?ids=${ids.slice(i, i + 40).join(",")}`));
+  return { items: (await Promise.all(batches)).flatMap((batch) => batch.items) };
 }
 
 export function fetchAppDetail(id: string) {

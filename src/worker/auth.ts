@@ -2,6 +2,7 @@ import type { RuntimeEnv } from "./env";
 
 const COOKIE = "appgap_session";
 const PAYLOAD = "appgap-ok-v1";
+const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function encoder() {
   return new TextEncoder();
@@ -36,8 +37,11 @@ export async function isAuthed(request: Request, env: RuntimeEnv): Promise<boole
   const cookie = request.headers.get("Cookie") || "";
   const match = cookie.match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`));
   if (!match?.[1]) return false;
-  const expected = await hmac(secret, PAYLOAD);
-  return timingEqual(match[1], expected);
+  const [expires, signature] = match[1].split(".");
+  const expiry = Number(expires);
+  if (!Number.isSafeInteger(expiry) || expiry <= Date.now() || expiry > Date.now() + SESSION_MS) return false;
+  const expected = await hmac(secret, `${PAYLOAD}:${expires}`);
+  return timingEqual(signature || "", expected);
 }
 
 export async function loginResponse(password: string, env: RuntimeEnv, request: Request): Promise<Response> {
@@ -48,7 +52,8 @@ export async function loginResponse(password: string, env: RuntimeEnv, request: 
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   }
-  const token = await hmac(secret, PAYLOAD);
+  const expires = Date.now() + SESSION_MS;
+  const token = `${expires}.${await hmac(secret, `${PAYLOAD}:${expires}`)}`;
   const secure = new URL(request.url).protocol === "https:";
   const cookie = `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure ? "; Secure" : ""}`;
   return new Response(JSON.stringify({ ok: true }), {

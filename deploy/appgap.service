@@ -1,0 +1,25 @@
+[Unit]
+Description=AppGap private App Store research
+After=network.target
+
+[Service]
+Type=simple
+User=appgap
+Group=appgap
+WorkingDirectory=/opt/appgap/current
+EnvironmentFile=/etc/appgap.env
+ExecStart=/opt/appgap/runtime/node/bin/node dist-server/index.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/appgap
+MemoryMax=384M
+CPUQuota=100%
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

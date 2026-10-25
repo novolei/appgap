@@ -1,7 +1,8 @@
 import { countryLabel, genreLabel } from "../shared/catalog";
 import type { AppDetail } from "../shared/types";
+import type { DataEnv } from "./env";
 
-type EnvAi = Env & { DEEPSEEK_API_KEY?: string };
+type EnvAi = DataEnv & { DEEPSEEK_API_KEY?: string };
 
 export async function runDeepseekAnalysis(env: EnvAi, detail: AppDetail): Promise<string> {
   const key = env.DEEPSEEK_API_KEY;

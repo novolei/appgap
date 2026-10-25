@@ -104,15 +104,15 @@ const SCAN_FEEDS = COUNTRIES.length * GENRES.length * CHARTS.length;
 
 export const DATA_SOURCE = {
   title: "数据来源",
-  summary: "每周一扫描 Apple 公开榜单，结果写入 D1。打开网站只读缓存。",
+  summary: "每周一扫描 Apple 公开榜单，保存完整快照。榜单页面只读缓存。",
   bullets: [
     "接口来自 Apple 公开 RSS 和 iTunes Lookup，不经过 Sensor Tower、七麦或 App Store Connect。",
     `每次扫描：${COUNTRIES.length} 个市场 × 工具/效率/照片/游戏 × 畅销榜+免费榜（${SCAN_FEEDS} 份），每份最多 100 名。`,
     `市场偏定价/付费率较高的店：${MARKET_NAMES}。`,
     "没有官方下载量和收入数字。畅销榜大致按付费+内购排序，免费榜大致按下载排序。",
     "Apple 没有官方「限免」榜。AppRaven 这类产品有限免列表，但没有稳定公开 API，所以还没接入。",
-    "每周一 08:30（北京时间）由 Cloudflare Worker 拉榜写入 D1。打开页面不会现场请求 Apple。",
-    "Apple 有时会拦 Cloudflare 机房 IP。Worker 失败就保留上一份快照，随后 GitHub Actions 会用非 Cloudflare IP 再补拉一次。",
+    "每周一 08:30（北京时间）由后台定时采集。榜单列表只读缓存，部分 App 详情会补读公开评论。",
+    "Apple 接口可能拒绝请求。采集失败或榜单覆盖不足时保留上一份完整快照。",
   ],
 };
 
