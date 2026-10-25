@@ -70,6 +70,7 @@ export async function loginResponse(password: string, env: RuntimeEnv, request: 
       headers: { "content-type": "application/json; charset=utf-8" },
     });
   }
+  if(env.ACCOUNTS_ACTIVE)await env.DB.prepare("UPDATE users SET last_login_at=? WHERE id='owner'").bind(new Date().toISOString()).run();
   const expires = Date.now() + SESSION_MS;
   const token = `${expires}.${await hmac(secret, `${PAYLOAD}:${expires}`)}`;
   const secure = new URL(request.url).protocol === "https:";

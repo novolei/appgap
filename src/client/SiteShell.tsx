@@ -10,7 +10,7 @@ export function SiteShell({children}:{children:ReactNode}) {
   async function refresh(){try{setUser((await communityApi<{user:Actor|null}>("/api/account/me")).user);}finally{setLoading(false);}}
   useEffect(()=>{void refresh().catch(()=>setLoading(false));},[]);
   const path=window.location.pathname;
-  useEffect(()=>{document.title=`AppGap · ${{"/login":"登录","/register":"创建账号","/account":"用户中心","/support":"支持者与捐赠","/steam":"Steam 机会研究"}[path]||"App Store 机会研究"}`;},[path]);
+  useEffect(()=>{document.title=`AppGap · ${{"/login":"登录","/register":"创建账号","/account":"用户中心","/admin/users":"注册用户管理","/support":"支持者与捐赠","/steam":"Steam 机会研究"}[path]||"App Store 机会研究"}`;},[path]);
   return <AccountContext.Provider value={{user,loading,refresh}}><div className="site-shell">
     <a className="skip-link" href="#main-content">跳至内容</a>
     <header className="site-header"><a className="site-brand" href="/"><span className="brand-mark">a<span>g</span></span><span>AppGap<small>发现需求，验证机会</small></span></a>

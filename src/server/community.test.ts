@@ -22,9 +22,12 @@ it("hashes credentials with independent salts and revokes server sessions on log
   const rows=db.sqlite.prepare("SELECT password_hash,recovery_hash FROM users WHERE role='member'").all();
   expect(rows[0].password_hash).not.toBe(rows[1].password_hash);expect(JSON.stringify(rows)).not.toContain("fixture-password");expect(JSON.stringify(rows)).not.toContain(a.body.recoveryCode);
   expect(await authenticatedUser(request("/",undefined,a.cookie),env)).toMatchObject({username:"alpha"});
+  const lastLogin=db.sqlite.prepare("SELECT last_login_at FROM users WHERE username='alpha'").get()!.last_login_at;
+  expect(lastLogin).toEqual(expect.any(String));
   expect(a.cookie).not.toBe(b.cookie);
   expect((await app.request(request("/api/account/logout",{},a.cookie))).status).toBe(200);
   expect(await authenticatedUser(request("/",undefined,a.cookie),env)).toBeNull();
+  expect(db.sqlite.prepare("SELECT last_login_at FROM users WHERE username='alpha'").get()!.last_login_at).toBe(lastLogin);
   expect((await app.request(request("/api/account/register",{username:"ALPHA",password:"fixture-password-123"}))).status).toBe(409);
 });
 it("consumes recovery codes once and invalidates every earlier login",async()=>{

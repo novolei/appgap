@@ -5,6 +5,7 @@ import { authenticatedUser } from "../worker/auth";
 import type { RuntimeEnv } from "../worker/env";
 import { analysisCache } from "../worker/analysis-cache";
 import { cookie, hash, limited, ownerHash, passwordHash, passwordMatches, passwordValid, secret, session } from "./account-security";
+import { accountAdminRoutes } from "./account-admin";
 
 type Credentials = { username: string; password: string; displayName?: string; recoveryCode?: string; newPassword?: string };
 export function accountRoutes(env: RuntimeEnv,origin: string) {
@@ -76,6 +77,7 @@ export function accountRoutes(env: RuntimeEnv,origin: string) {
     return c.json({ok:true});
   });
   app.use("*",async(c,next) => { if(!await actor(c.req.raw)) throw new HTTPException(401,{message:"请先登录。"});await next(); });
+  app.route("/admin",accountAdminRoutes(env));
   app.get("/dashboard",async c => {
     const user=(await actor(c.req.raw))!;
     const pools=await env.DB.prepare("SELECT pool,count(*) AS n FROM user_pools WHERE user_id=? GROUP BY pool").bind(user.id).all();

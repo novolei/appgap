@@ -37,6 +37,9 @@ export function cookie(c: Context,name: string,value: string,maxAge=30*86400) {
 export async function session(c: Context,env: RuntimeEnv,id: string) {
   const token=secret(),now=new Date().toISOString();
   await env.DB.prepare("DELETE FROM user_sessions WHERE expires_at<?").bind(now).run();
-  await env.DB.prepare("INSERT INTO user_sessions VALUES(?,?,?,?)").bind(hash(token),id,now,new Date(Date.now()+30*86400000).toISOString()).run();
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO user_sessions VALUES(?,?,?,?)").bind(hash(token),id,now,new Date(Date.now()+30*86400000).toISOString()),
+    env.DB.prepare("UPDATE users SET last_login_at=? WHERE id=?").bind(now,id),
+  ]);
   cookie(c,"appgap_user",token);
 }
