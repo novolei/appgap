@@ -14,6 +14,7 @@ import sys
 import tempfile
 import ipaddress
 import urllib.request
+import time
 from datetime import datetime, timezone
 from contextlib import closing
 
@@ -81,10 +82,15 @@ def install(directory,manifest,files):
 def github_addresses():
     addresses=[]
     for resolver in ('https://dns.alidns.com/resolve?name=ssh.github.com&type=A&edns_client_subnet=8.8.8.0%2F24','https://doh.pub/resolve?name=ssh.github.com&type=A'):
-        try:
-            answer=json.loads(subprocess.check_output(['curl','--fail','--silent','--show-error','--connect-timeout','3','--max-time','8','--max-filesize','65536',resolver],timeout=12))
-            addresses.extend(row['data'] for row in answer.get('Answer',[]) if row.get('type')==1 and ipaddress.ip_address(row['data']).version==4 and ipaddress.ip_address(row['data']).is_global)
-        except (OSError,ValueError,subprocess.SubprocessError):continue
+        for attempt in range(3):
+            try:
+                answer=json.loads(subprocess.check_output(['curl','--fail','--silent','--show-error','--connect-timeout','3','--max-time','8','--max-filesize','65536',resolver],timeout=12))
+                current=[row['data'] for row in answer.get('Answer',[]) if row.get('type')==1 and ipaddress.ip_address(row['data']).version==4 and ipaddress.ip_address(row['data']).is_global] if answer.get('Status')==0 else []
+                if current:
+                    addresses.extend(current)
+                    break
+            except (OSError,ValueError,subprocess.SubprocessError):pass
+            if attempt<2:time.sleep(.5)
     if not addresses:
         raise ValueError('trusted HTTPS DNS did not return a public GitHub SSH address')
     return list(dict.fromkeys(addresses))
@@ -96,6 +102,11 @@ def sync(directory,credentials):
         raise ValueError('less than 1 GiB disk headroom; keeping existing data')
     # The VPS resolver returned a non-GitHub address; override only this pinned SSH connection.
     addresses=github_addresses()
+    manifest_path=directory/'manifest.json'
+    if manifest_path.exists():
+        peer=json.loads(manifest_path.read_bytes()).get('gitPeer')
+        if peer and ipaddress.ip_address(peer).is_global:
+            addresses.insert(0,peer)
     environment={**os.environ,'GIT_TERMINAL_PROMPT':'0'}
     for address in dict.fromkeys(addresses):
         environment['GIT_SSH_COMMAND']=f"ssh -F /dev/null -i {shlex.quote(str(credentials/'github-deploy-key'))} -o HostName={address} -o HostKeyAlias='[ssh.github.com]:443' -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/appgap-github-known-hosts"
@@ -110,7 +121,6 @@ def sync(directory,credentials):
                 print('STEAM_GITHUB_CHECK',address,flush=True)
                 remote=git('ls-remote',url,'refs/heads/snapshot').decode().split()
                 if not remote:raise ValueError('private snapshot branch missing')
-                manifest_path=directory/'manifest.json'
                 if manifest_path.exists() and json.loads(manifest_path.read_bytes()).get('gitHead')==remote[0]:
                     print('STEAM_SYNC_UNCHANGED');return
                 git('fetch','--depth=1','--no-tags','--force',url,'refs/heads/snapshot:refs/heads/snapshot')
@@ -125,6 +135,7 @@ def sync(directory,credentials):
             files={name:read(name,8*1024*1024) for name in ('latest.json.gz','history.sqlite.gz')}
             install(directory,manifest,files)
             manifest['gitHead']=remote[0]
+            manifest['gitPeer']=address
             atomic_json(directory/'manifest.json',manifest)
             return
     raise ValueError('all pinned GitHub SSH connections failed; keeping existing snapshot')
