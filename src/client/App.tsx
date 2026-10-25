@@ -282,18 +282,21 @@ export function App() {
         <input value={query} placeholder="中文译名、原名、开发者" onChange={(event) => setQuery(event.target.value)} />
       </label>
 
-      <nav className="nav">
-        {LENSES.map((item) => (
-          <button key={item.id} className={lens === item.id ? "active" : ""} onClick={() => openLens(item.id)}>
-            {item.label}
-          </button>
-        ))}
-        <span className="split" />
-        {POOLS.map((item) => (
-          <button key={item.id} className={lens === item.id ? "active" : ""} onClick={() => openLens(item.id)}>
-            {item.label} {pools[item.id].length}
-          </button>
-        ))}
+      <nav className="app-lens-nav" aria-label="研究分类">
+        <div className="app-lens-tabs" role="group" aria-label="榜单分类">
+          {LENSES.map((item) => (
+            <button type="button" key={item.id} aria-pressed={lens === item.id} onClick={() => openLens(item.id)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="app-pool-tabs" role="group" aria-label="我的清单">
+          {POOLS.map((item) => (
+            <button type="button" key={item.id} aria-pressed={lens === item.id} onClick={() => openLens(item.id)}>
+              <span>{item.label}</span><span className="app-pool-count">{pools[item.id].length}</span>
+            </button>
+          ))}
+        </div>
       </nav>
 
       <div className="countries" role="tablist" aria-label="按国家筛选">
