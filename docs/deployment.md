@@ -4,7 +4,7 @@
 
 ## 本地验证 / 打包
 
-Node 24.19.0；`pnpm install --frozen-lockfile`、`pnpm test`、`pnpm build:server`、`node scripts/smoke-server.mjs`。源码在 `G:/MyTools/appgap` 的 `codex/rainplay-self-host` 分支；先提交，再按提交哈希命名 release。包只包含 `dist/`、`dist-server/`、`migrations/`、`deploy/` 和 `package.json`，不含凭据、node_modules、原 D1 或本地数据库。
+Node 24.19.0；`pnpm install --frozen-lockfile`、`pnpm test`、`python -m unittest discover -s scripts/steam -p 'test_*.py'`、`pnpm build:server`、`node scripts/smoke-server.mjs`。源码在 `G:/MyTools/appgap` 的 `codex/rainplay-self-host` 分支；先提交，再按提交哈希命名 release。包只包含 `dist/`、`dist-server/`、`migrations/`、`deploy/`、`scripts/steam/`、`docs/` 和 `package.json`，不含凭据、node_modules、原 D1 或本地数据库。研究报告和冻结数据仅在私有仓库及受站点登录保护的静态目录保存，不进公开源码提交。
 
 ## 主机布局
 
@@ -12,9 +12,9 @@ Node 24.19.0；`pnpm install --frozen-lockfile`、`pnpm test`、`pnpm build:serv
 - `/opt/appgap/releases/<commit>/`、`current`、`previous`：只读应用版本，健康检查失败恢复原链接。
 - `/var/lib/appgap/appgap.sqlite`：新站独立数据库，由版本化 SQL 自动迁移；owner appgap，目录 0700。切换旧应用前必须先核对迁移兼容性，当前迁移均为新增表 / 索引。
 - `/etc/appgap.env`：root 0600；站点口令仅在此，最少 10 字符；DeepSeek Key 可选，不进入前端或日志。首次 bootstrap 随机生成口令，不显示值。
-- `appgap.service`：仅 `127.0.0.1:8790`，非 root、受限文件写入、384 MiB 上限。
+- `appgap.service`：仅 `127.0.0.1:8790`，非 root、受限文件写入、768 MiB 上限（含有大小限制的导入子进程）。
 - `appgap-ingest.timer`：每周一香港时间 08:30；可用 `systemctl start --no-block appgap-ingest.service` 人工触发。任务最多 55 分钟，数据库锁 60 分钟后过期；不要并发手工绕过。
-- `appgap-backup.timer`：每天香港时间 03:20；在线一致性备份到 `/var/backups/appgap/`，保留 30 天。独立于已有 Mini Tanks 备份，当前不冒充异地容灾。
+- `appgap-backup.timer`：每天香港时间 03:20；在线一致性备份到 `/var/backups/appgap/`，主库保留 30 天，Steam 快照 / 历史保留 7 天。独立于已有 Mini Tanks 备份，当前不冒充异地容灾。
 
 ## Cloudflare 与秘密
 
@@ -22,4 +22,14 @@ DNS 继续经 `ssh tx-vgm` 在服务器上读 `/etc/mini-tanks-certs/cloudflare.
 
 仓库原来的 `pnpm deploy` 和 `pnpm ingest:prod` 仍指向原 Workers / D1；**本次 VPS 运维不要运行它们**。VPS 只运行 `dist-server/index.js`、`--ingest` 和 `--backup`。
 
-当前部署和公网验收的实际结果在完成后追加；本文件不预先宣称上线成功。
+## 已上线与数据交付（2026-10-25）
+
+`appgap.if2.ai` 已通过独立 Cloudflare Tunnel `appgap-rainplay` → 回环端口上线；官方 cloudflared 运行在专用非登录用户下，token 仅在 root 0600 文件中经 systemd Credential 提供。DNS 经 TX API 先建再绑定；Cloudflare 边缘 TLS，无需改变原游戏域名、80 / 443 映射或全机网络配置。
+
+Steam 管线在私有仓库 `novolei/appgap-steam-data` 每日香港时间 09:13 运行。先归档，再更新只存最新产物的 `snapshot` 分支，随后用独立发布令牌 POST `/api/steam/publish`。该令牌仅存服务器环境文件与 GitHub Actions Secret；它不能 SSH 登录、读取原站或调用 Cloudflare。默认 Python User-Agent 曾被边缘拒绝，改用明确标识 AppGap 的 User-Agent 后成功，未降低 WAF 或认证保护。原 VPS 拉取方案及只读部署密钥撤销。
+
+首个成功端到端运行：[40183693736](https://github.com/novolei/appgap-steam-data/actions/runs/40183693736)。首份完整快照：430 款游戏、29 地区、3,045 条去重榜单记录、422 / 422 评论目标成功、887 份源响应。采集完成于香港时间 2026-10-25 16:45:44；分析版本 `2026-10-25.3`。本次完整周榜基线为 10 月 6 日，明确不参与当前动量评分。
+
+导入请求最多 24 MiB；每个压缩产物最多 8 MiB；解压 JSON / SQLite 最多 25 / 128 MiB，至少保留 1 GiB 空余磁盘。完整 payload 保留两期、紧凑历史保留 400 天，原始响应留私有 Artifacts 7 天（单次最多 32 MiB）。网站失败时保留旧数据。私有 Actions 使用账号共享分钟数和存储配额，未改变预算或计费设置。
+
+已验证受保护的新站 App Store / Steam 页面、真实采集、GitHub Actions HTTPS 交付、Node → Python → SQLite 导入与重复包幂等。App Store 新站首次采集得到 3,818 款应用、15,166 条榜单和 560 个机会。未运行付费 DeepSeek 生成；仍需 14–28 天同口径历史后再验证持续趋势。

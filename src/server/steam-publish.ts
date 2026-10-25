@@ -40,7 +40,7 @@ export function registerSteamPublisher(
       try {
         const result = await new Promise<string>((resolve, reject) => {
           const child = spawn(
-            process.env.PYTHON_BIN || "python3",
+            process.env.PYTHON_BIN || (process.platform === "win32" ? "python" : "python3"),
             ["deploy/receive-steam.py", directory],
             {
               stdio: ["pipe", "pipe", "pipe"],
@@ -48,6 +48,8 @@ export function registerSteamPublisher(
               env: {
                 PATH: process.env.PATH,
                 PYTHONUTF8: "1",
+                ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}),
+                ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}),
                 ...(process.env.SystemRoot
                   ? { SystemRoot: process.env.SystemRoot }
                   : {}),

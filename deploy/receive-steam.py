@@ -1,14 +1,13 @@
 """Receive a bounded authenticated data package; no network or command execution from data."""
 import base64
-import importlib.util
 import json
 import pathlib
 import sys
+import shutil
 
 root=pathlib.Path(__file__).resolve().parent
-spec=importlib.util.spec_from_file_location('steam_sync',root/'sync-steam.py')
-sync=importlib.util.module_from_spec(spec)
-spec.loader.exec_module(sync)
+sys.path.insert(0,str(root))
+from steam_snapshot import install, atomic_json, collector_lock
 
 
 def receive(directory,body):
@@ -23,14 +22,14 @@ def receive(directory,body):
         if not isinstance(value,str) or len(value)>12*1024*1024:
             raise ValueError('encoded file exceeds import budget')
         files[name]=base64.b64decode(value,validate=True)
-    with sync.collector_lock(directory):
+    with collector_lock(directory):
         current=directory/'manifest.json'
         if current.exists() and json.loads(current.read_bytes()).get('sha256')==manifest['sha256']:
             return {'ok':True,'cached':True,'runId':manifest['runId']}
-        if sync.shutil.disk_usage(directory).free<1024*1024*1024:
+        if shutil.disk_usage(directory).free<1024*1024*1024:
             raise ValueError('less than 1 GiB disk headroom')
-        sync.install(directory,manifest,files)
-        sync.atomic_json(current,manifest)
+        install(directory,manifest,files)
+        atomic_json(current,manifest)
     return {'ok':True,'cached':False,'runId':manifest['runId']}
 
 

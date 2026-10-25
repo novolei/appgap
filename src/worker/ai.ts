@@ -45,7 +45,7 @@ export async function generateAnalysis(env: EnvAi, prompt: string): Promise<stri
   if (!key) throw new Error("未配置 DEEPSEEK_API_KEY");
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
-    signal: AbortSignal.timeout(25000),
+    signal: AbortSignal.timeout(45000),
     headers: {
       authorization: `Bearer ${key}`,
       "content-type": "application/json",
@@ -53,7 +53,8 @@ export async function generateAnalysis(env: EnvAi, prompt: string): Promise<stri
     body: JSON.stringify({
       model: env.DEEPSEEK_MODEL || "deepseek-flash",
       temperature: 0.4,
-      max_tokens: 1800,
+      max_tokens: 3200,
+      thinking: { type: "disabled" },
       messages: [
         {
           role: "system",
@@ -68,8 +69,9 @@ export async function generateAnalysis(env: EnvAi, prompt: string): Promise<stri
     throw new Error(`DeepSeek ${response.status}: ${err.slice(0, 200)}`);
   }
   const json = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
   };
+  if (json.choices?.[0]?.finish_reason === "length") throw new Error("分析超出输出上限，未缓存不完整结果");
   const text = json.choices?.[0]?.message?.content?.trim();
   if (!text) throw new Error("模型没有返回内容");
   return text;
